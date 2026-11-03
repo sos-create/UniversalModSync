@@ -1,0 +1,8 @@
+# HTTP endpoint used by the companion client launcher.
+http:
+  enabled: true
+  bind-address: 0.0.0.0
+  port: 8765
+
+# JAR files placed in plugins/UniversalModSync/mods are published to the launcher.
+# Paper does NOT load Forge mods. They are downloaded by a compatible client launcher.
