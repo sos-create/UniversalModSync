@@ -3,11 +3,11 @@ version: '${version}'
 main: com.soscreate.universalmodsync.UniversalModSyncPlugin
 api-version: '1.21'
 author: sos-create
-description: Mod discovery and Paper adapter compatibility framework.
+description: Mod discovery and Paper adapter framework for server-side mod functionality.
 commands:
   modsync:
     description: UniversalModSync compatibility management
-    usage: /modsync <status|scan|mods|reload>
+    usage: /modsync <status|scan|mods|adapters|reload>
     permission: universalmodsync.admin
 permissions:
   universalmodsync.admin:
