@@ -3,13 +3,13 @@ version: '${version}'
 main: com.soscreate.universalmodsync.UniversalModSyncPlugin
 api-version: '1.21'
 author: sos-create
-description: Manages and serves a verified client modpack manifest for external launchers.
+description: Server-side adventure content with cached custom items and dungeons.
 commands:
   modsync:
-    description: Universal ModSync administration
-    usage: /modsync <status|reload>
+    description: UniversalModSync gameplay and administration
+    usage: /modsync <status|reload|dungeon|boss|give <player> <item>>
     permission: universalmodsync.admin
 permissions:
   universalmodsync.admin:
-    description: Allows administration of Universal ModSync
+    description: Allows administration of UniversalModSync
     default: op
