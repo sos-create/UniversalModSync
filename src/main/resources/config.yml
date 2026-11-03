@@ -1,15 +1,15 @@
-# UniversalModSync compatibility core.
-# Forge/Fabric JARs placed here are inspected, not executed by Paper.
-# A compatible Paper adapter is required to implement each mod's behavior.
+# UniversalModSync — Paper adapter framework.
+# Original Forge/Fabric JARs are inspected for metadata only; Paper cannot execute them.
+# Install trusted Paper adapter JARs into plugins/UniversalModSync/adapters/.
+# Put mod archives to inspect into plugins/UniversalModSync/mods/.
 mods:
   directory: "mods"
-
+adapters:
+  directory: "adapters"
 http:
   enabled: true
   bind-address: "0.0.0.0"
   port: 8765
-
-# Optional generic resource pack assembled from adapter-provided assets.
 resource-pack:
   enabled: true
   public-url: ""
