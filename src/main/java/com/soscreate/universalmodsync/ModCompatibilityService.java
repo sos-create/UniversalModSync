@@ -16,13 +16,11 @@ import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Inspects Forge/Fabric metadata. It never defines or executes classes from mod JARs.
- */
+/** Reads mod metadata only. Mod bytecode is never loaded or executed. */
 public final class ModCompatibilityService {
-    private static final Pattern TOML_MOD_BLOCK = Pattern.compile("(?ms)^\\s*\\[\\[mods]](.*?)(?=^\\s*\\[\\[|\\z)");
-    private static final Pattern TOML_ID = Pattern.compile("(?m)^\\s*modId\\s*=\\s*[\"']([^'\"\\r\\n]+)[\"']");
-    private static final Pattern TOML_VERSION = Pattern.compile("(?m)^\\s*version\\s*=\\s*[\"']([^'\"\\r\\n]+)[\"']");
+    private static final Pattern TOML_MOD_BLOCK = Pattern.compile("(?ms)^\\s*\\[\\[mods\\]\\](.*?)(?=^\\s*\\[\\[|\\z)");
+    private static final Pattern TOML_ID = Pattern.compile("(?m)^\\s*modId\\s*=\\s*[\"']([^\"'\\r\\n]+)[\"']");
+    private static final Pattern TOML_VERSION = Pattern.compile("(?m)^\\s*version\\s*=\\s*[\"']([^\"'\\r\\n]+)[\"']");
     private static final Pattern FABRIC_ID = Pattern.compile("\"id\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern FABRIC_VERSION = Pattern.compile("\"version\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern FABRIC_ENV = Pattern.compile("\"environment\"\\s*:\\s*\"([^\"]+)\"");
@@ -31,8 +29,13 @@ public final class ModCompatibilityService {
     private List<ModDescriptor> lastMods = List.of();
 
     public ModCompatibilityService(JavaPlugin plugin) throws IOException {
-        modsDirectory = plugin.getDataFolder().toPath().resolve("mods").toAbsolutePath().normalize();
+        this(plugin, plugin.getDataFolder().toPath().resolve("mods"));
+    }
+
+    public ModCompatibilityService(JavaPlugin plugin, Path directory) throws IOException {
+        modsDirectory = directory.toAbsolutePath().normalize();
         Files.createDirectories(modsDirectory);
+        if (!Files.isDirectory(modsDirectory)) throw new IOException("Mods path is not a directory: " + modsDirectory);
     }
 
     public List<ModDescriptor> scan() throws IOException {
@@ -51,7 +54,7 @@ public final class ModCompatibilityService {
 
     private List<ModDescriptor> inspect(Path file) {
         String name = file.getFileName().toString();
-        try (JarFile jar = new JarFile(file.toFile())) {
+        try (JarFile jar = new JarFile(file.toFile(), false)) {
             var forge = jar.getJarEntry("META-INF/mods.toml");
             if (forge != null) {
                 String toml;
@@ -91,7 +94,7 @@ public final class ModCompatibilityService {
 
     private static List<String> forgeDependencies(String toml, String modId) {
         Pattern section = Pattern.compile("(?ms)^\\s*\\[\\[dependencies\\." + Pattern.quote(modId)
-                + "]](.*?)(?=^\\s*\\[\\[|\\z)");
+                + "\\]\\](.*?)(?=^\\s*\\[\\[|\\z)");
         Matcher matcher = section.matcher(toml);
         Set<String> dependencies = new LinkedHashSet<>();
         while (matcher.find()) {
