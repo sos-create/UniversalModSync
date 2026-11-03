@@ -34,19 +34,33 @@ public interface ModAdapter {
 
     default void onDisable() { }
 
-    /** Exact filename comparison, ignoring letter case; rejects path-like entries. */
+    /** Exact archive filename comparison, ignoring letter case; no patterns or paths. */
     static boolean targetsFile(Set<String> supportedFiles, String detectedFileName) {
-        if (supportedFiles == null || supportedFiles.isEmpty()
-                || detectedFileName == null || detectedFileName.isBlank()) {
+        if (!isArchiveFileName(detectedFileName) || supportedFiles == null || supportedFiles.isEmpty()) {
             return false;
         }
-        String detected = detectedFileName.trim();
         for (String configured : supportedFiles) {
-            if (configured == null) continue;
-            String candidate = configured.trim();
-            if (candidate.isEmpty() || candidate.contains("/") || candidate.indexOf(92) >= 0) continue;
-            if (candidate.equalsIgnoreCase(detected)) return true;
+            if (isArchiveFileName(configured)
+                    && configured.trim().equalsIgnoreCase(detectedFileName.trim())) {
+                return true;
+            }
         }
         return false;
     }
+
+    private static boolean isArchiveFileName(String value) {
+        if (value == null || value.isBlank()) return false;
+        String name = value.trim();
+        if (name.equals(".") || name.equals("..")
+                || name.indexOf('/') >= 0 || name.indexOf(92) >= 0
+                || name.indexOf('*') >= 0 || name.indexOf('?') >= 0) {
+            return false;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isISOControl(name.charAt(i))) return false;
+        }
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith(".jar") || lower.endsWith(".zip");
+    }
+
 }
