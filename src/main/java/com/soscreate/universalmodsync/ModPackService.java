@@ -23,17 +23,19 @@ import java.util.zip.ZipFile;
 public final class ModPackService {
     private static final Pattern TOML_SECTION = Pattern.compile("(?m)^\\[\\[([^]]+)]]\\s*$");
     private static final Pattern TOML_VALUE = Pattern.compile("(?m)^\\s*([A-Za-z0-9_.-]+)\\s*=\\s*(.*?)\\s*$");
-    private static final Pattern QUOTED = Pattern.compile("^\"(.*)\"$");
+    private static final Pattern QUOTED = Pattern.compile("^\\\"(.*)\\\"$");
 
     private final Path modsDirectory;
     private final Logger logger;
+    private final boolean includeUnrecognizedJars;
     private final AtomicLong revision = new AtomicLong(1);
     private volatile List<ModEntry> entries = List.of();
     private volatile String manifestFingerprint = "";
 
-    public ModPackService(Path modsDirectory, Logger logger) {
+    public ModPackService(Path modsDirectory, Logger logger, boolean includeUnrecognizedJars) {
         this.modsDirectory = modsDirectory.toAbsolutePath().normalize();
         this.logger = logger;
+        this.includeUnrecognizedJars = includeUnrecognizedJars;
     }
 
     public synchronized RefreshResult refresh() throws IOException {
@@ -53,6 +55,10 @@ public final class ModPackService {
                     long size = Files.size(path);
                     FileTime modified = Files.getLastModifiedTime(path);
                     ModEntry entry = inspect(path, name, size, modified);
+                    if (!entry.loader().startsWith("forge") && !includeUnrecognizedJars) {
+                        logger.warning("Skipping non-Forge or unrecognized JAR: " + name);
+                        continue;
+                    }
                     found.add(entry);
                     fingerprints.add(name + ":" + size + ":" + modified.toMillis() + ":" + entry.sha256());
                 } catch (Exception exception) {
@@ -76,6 +82,8 @@ public final class ModPackService {
         List<ModInfo> mods = new ArrayList<>();
         List<ModDependency> dependencies = new ArrayList<>();
         String loader = "unknown";
+        String modLoader = "";
+        String loaderVersion = "";
         try (ZipFile jar = new ZipFile(path.toFile())) {
             ZipEntry forgeMetadata = jar.getEntry("META-INF/mods.toml");
             if (forgeMetadata != null) {
@@ -84,19 +92,32 @@ public final class ModPackService {
                 try (var input = jar.getInputStream(forgeMetadata)) {
                     toml = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 }
+                Map<String, String> topLevel = parseTopLevelValues(toml);
+                modLoader = unquote(topLevel.getOrDefault("modLoader", ""));
+                loaderVersion = unquote(topLevel.getOrDefault("loaderVersion", ""));
                 parseForgeToml(toml, mods, dependencies);
             } else if (jar.getEntry("mcmod.info") != null) {
                 loader = "forge-legacy";
-            } else {
-                logger.warning("JAR does not contain META-INF/mods.toml or mcmod.info (not identified as Forge): " + fileName);
             }
         }
         if (mods.isEmpty()) {
             String fallback = fileName.substring(0, fileName.length() - 4);
-            mods.add(new ModInfo(fallback, fallback, "unknown", ""));
+            mods.add(new ModInfo(fallback, fallback, "unknown", "", "UNKNOWN"));
         }
-        return new ModEntry(fileName, size, hash, loader, List.copyOf(mods),
-                List.copyOf(dependencies), modified.toMillis());
+        return new ModEntry(fileName, size, hash, loader, modLoader, loaderVersion,
+                "CLIENT", List.copyOf(mods), List.copyOf(dependencies), modified.toMillis());
+    }
+
+    private static Map<String, String> parseTopLevelValues(String toml) {
+        Map<String, String> values = new LinkedHashMap<>();
+        StringBuilder top = new StringBuilder();
+        for (String line : toml.split("\\R")) {
+            if (line.trim().startsWith("[[")) break;
+            top.append(line).append('\n');
+        }
+        Matcher matcher = TOML_VALUE.matcher(top);
+        while (matcher.find()) values.put(matcher.group(1), matcher.group(2).trim());
+        return values;
     }
 
     private static void parseForgeToml(String toml, List<ModInfo> mods, List<ModDependency> dependencies) {
@@ -119,7 +140,8 @@ public final class ModPackService {
                     mods.add(new ModInfo(id,
                             unquote(values.getOrDefault("displayName", id)),
                             unquote(values.getOrDefault("version", "unknown")),
-                            unquote(values.getOrDefault("description", ""))));
+                            unquote(values.getOrDefault("description", "")),
+                            unquote(values.getOrDefault("displayTest", "MATCH_VERSION"))));
                 }
             } else if (section.name().startsWith("dependencies.")) {
                 String owner = section.name().substring("dependencies.".length());
@@ -173,10 +195,11 @@ public final class ModPackService {
     }
 
     private record Section(String name, String body) { }
-    public record ModInfo(String modId, String displayName, String version, String description) { }
+    public record ModInfo(String modId, String displayName, String version, String description, String displayTest) { }
     public record ModDependency(String ownerModId, String modId, String versionRange,
                                 boolean mandatory, String side) { }
     public record ModEntry(String fileName, long size, String sha256, String loader,
+                           String modLoader, String loaderVersion, String targetSide,
                            List<ModInfo> mods, List<ModDependency> dependencies, long lastModified) { }
     public record RefreshResult(boolean changed, int modCount, long revision) { }
 }
