@@ -16,12 +16,20 @@ public final class ModSyncHttpServer {
     private final ModPackService modPackService;
     private final Logger logger;
     private final String pluginVersion;
+    private final String packName;
+    private final String minecraftVersion;
+    private final String forgeVersion;
 
-    public ModSyncHttpServer(InetSocketAddress address, ModPackService service, Logger logger, String pluginVersion) throws IOException {
+    public ModSyncHttpServer(InetSocketAddress address, ModPackService service, Logger logger,
+                             String pluginVersion, String packName, String minecraftVersion,
+                             String forgeVersion) throws IOException {
         this.server = HttpServer.create(address, 0);
         this.modPackService = service;
         this.logger = logger;
         this.pluginVersion = pluginVersion;
+        this.packName = packName;
+        this.minecraftVersion = minecraftVersion;
+        this.forgeVersion = forgeVersion;
         server.createContext("/v1/health", this::handleHealth);
         server.createContext("/v1/manifest", this::handleManifest);
         server.createContext("/v1/mods/", this::handleMod);
@@ -33,13 +41,16 @@ public final class ModSyncHttpServer {
 
     private void handleHealth(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equals("GET")) { respond(exchange, 405, "Method not allowed"); return; }
-        respond(exchange, 200, "{\"status\":\"ok\",\"protocol\":1}");
+        respond(exchange, 200, "{\"status\":\"ok\",\"protocol\":1,\"target\":\"CLIENT_SINGLEPLAYER\"}");
     }
 
     private void handleManifest(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equals("GET")) { respond(exchange, 405, "Method not allowed"); return; }
         StringBuilder json = new StringBuilder("{\"protocol\":1,\"pluginVersion\":\"")
-                .append(escape(pluginVersion)).append("\",\"revision\":")
+                .append(escape(pluginVersion)).append("\",\"pack\":{\"name\":\"")
+                .append(escape(packName)).append("\",\"target\":\"CLIENT_SINGLEPLAYER\",\"loader\":\"forge\",\"minecraftVersion\":\"")
+                .append(escape(minecraftVersion)).append("\",\"forgeVersion\":\"")
+                .append(escape(forgeVersion)).append("\"},\"revision\":")
                 .append(modPackService.getRevision()).append(",\"mods\":[");
         boolean first = true;
         for (ModPackService.ModEntry entry : modPackService.getEntries()) {
@@ -49,7 +60,9 @@ public final class ModSyncHttpServer {
                     .append("\",\"size\":").append(entry.size())
                     .append(",\"sha256\":\"").append(entry.sha256())
                     .append("\",\"loader\":\"").append(escape(entry.loader()))
-                    .append("\",\"lastModified\":").append(entry.lastModified())
+                    .append("\",\"modLoader\":\"").append(escape(entry.modLoader()))
+                    .append("\",\"loaderVersion\":\"").append(escape(entry.loaderVersion()))
+                    .append("\",\"targetSide\":\"CLIENT\",\"lastModified\":").append(entry.lastModified())
                     .append(",\"mods\":[");
             boolean firstMod = true;
             for (ModPackService.ModInfo mod : entry.mods()) {
@@ -58,7 +71,8 @@ public final class ModSyncHttpServer {
                 json.append("{\"modId\":\"").append(escape(mod.modId()))
                         .append("\",\"displayName\":\"").append(escape(mod.displayName()))
                         .append("\",\"version\":\"").append(escape(mod.version()))
-                        .append("\",\"description\":\"").append(escape(mod.description())).append("\"}");
+                        .append("\",\"description\":\"").append(escape(mod.description()))
+                        .append("\",\"displayTest\":\"").append(escape(mod.displayTest())).append("\"}");
             }
             json.append("],\"dependencies\":[");
             boolean firstDependency = true;
