@@ -19,7 +19,7 @@ public interface ModAdapter {
     String getName();
 
     /**
-     * Exact Forge/Fabric archive file names implemented by this adapter.
+     * Exact Forge/Fabric/Quilt archive file names implemented by this adapter.
      * Example: Set.of("ExampleMod-1.2.0.jar").
      *
      * A mod archive is normally a .jar file (JAR uses the ZIP container format).
