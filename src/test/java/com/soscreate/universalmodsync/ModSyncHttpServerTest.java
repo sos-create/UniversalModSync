@@ -66,6 +66,21 @@ class ModSyncHttpServerTest {
     }
 
     @Test
+    void closingBeforeStartReleasesTheBoundPort() throws Exception {
+        ResourcePackService packs = new ResourcePackService(tempDir);
+        packs.rebuild();
+        ModSyncHttpServer server = new ModSyncHttpServer(
+                new InetSocketAddress("127.0.0.1", 0), packs);
+        InetSocketAddress bound = server.getAddress();
+
+        assertDoesNotThrow(server::close);
+        try (java.net.ServerSocket probe = new java.net.ServerSocket()) {
+            probe.setReuseAddress(false);
+            assertDoesNotThrow(() -> probe.bind(bound));
+        }
+    }
+
+    @Test
     void stopIsSafeWhenCalledMoreThanOnce() throws Exception {
         ResourcePackService packs = new ResourcePackService(tempDir);
         packs.rebuild();
