@@ -23,3 +23,13 @@ pack:
 # Client-only/singleplayer mode means these mods are installed on each player's
 # Forge game client. A singleplayer world runs its integrated server inside
 # that client. Paper remains only a pack distribution endpoint.
+
+# Resource pack is cached by Minecraft and automatically selected only on this server.
+# It is NOT copied into the player's mods folder and players do not need to delete it.
+# Put custom assets under plugins/UniversalModSync/resource-pack/.
+# Set this URL to the public address of your server's HTTP endpoint.
+resource-pack:
+  enabled: true
+  public-url: ""
+  required: false
+  prompt: "&eThis server offers custom items, mobs and dungeon visuals. Accept the resource pack?"
