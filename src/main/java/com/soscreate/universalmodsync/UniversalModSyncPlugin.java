@@ -313,7 +313,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            sender.sendMessage(ChatColor.YELLOW + "Adapter JAR changes require a full server restart.");
+            sender.sendMessage(ChatColor.YELLOW + "Adding or changing mod/adapter JAR files requires a full server restart to activate. This command refreshes metadata and the resource pack only.");
             if (compatibility != null) {
                 try {
                     detectedMods = compatibility.scan();
