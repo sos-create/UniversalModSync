@@ -1,20 +1,29 @@
-# UniversalModSync — Paper adapter framework.
-# Forge/Fabric archives are inspected for metadata only; Paper cannot execute their bytecode.
-# Put mod JARs in plugins/UniversalModSync/mods/ by default.
-# Put trusted Paper adapter JARs in plugins/UniversalModSync/adapters/ by default.
+# UniversalModSync — Paper-side mod discovery and adapter framework.
+# Forge/Fabric/Quilt archives are inspected for metadata only; original mod bytecode is never executed.
+# Put mod .jar or .zip archives in plugins/UniversalModSync/mods/.
+# Put trusted Paper adapter JARs in plugins/UniversalModSync/adapters/.
+# An adapter targets the exact archive filename, e.g. "ExampleMod-1.2.0.jar".
 # Relative paths are resolved from plugins/UniversalModSync/. Absolute paths are also accepted.
+
 mods:
   directory: "mods"
+
 adapters:
   directory: "adapters"
+
 http:
-  enabled: true
-  bind-address: "0.0.0.0"
+  # Disabled by default: the HTTP endpoint is optional and should be enabled intentionally.
+  enabled: false
+  # Use a reverse proxy for public HTTPS access; localhost is the safe default.
+  bind-address: "127.0.0.1"
   port: 8765
+  # Set true only when you intentionally want to listen on all interfaces (0.0.0.0 or ::).
+  allow-public-bind: false
+
 resource-pack:
   enabled: true
-  # Set a publicly reachable HTTPS URL, e.g. https://example.com/UniversalModSync-resource-pack.zip
-  # Empty means the plugin will not send a resource pack to players.
+  # The server sends the pack only when this is a valid, publicly reachable HTTP(S) URL.
+  # Example: https://example.com/UniversalModSync-resource-pack.zip
   public-url: ""
   required: false
   prompt: "&eThis server provides custom assets. Download the resource pack?"
