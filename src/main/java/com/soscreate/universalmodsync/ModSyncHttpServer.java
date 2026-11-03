@@ -71,9 +71,15 @@ public final class ModSyncHttpServer implements AutoCloseable {
 
     public synchronized void stop() {
         if (!stopped.compareAndSet(false, true)) return;
-        if (started) server.stop(0);
-        executor.shutdownNow();
-        started = false;
+        try {
+            // HttpServer may already have bound its socket before start() is called.
+            server.stop(0);
+        } catch (IllegalStateException ignored) {
+            // A server that never started has no active exchange to drain.
+        } finally {
+            executor.shutdownNow();
+            started = false;
+        }
     }
 
     private void handleHealth(HttpExchange exchange) throws IOException {
@@ -103,7 +109,8 @@ public final class ModSyncHttpServer implements AutoCloseable {
         }
 
         ResourcePackService.PackInfo pack = resourcePacks.getInfo();
-        if (pack == null || !Files.isRegularFile(pack.path())) {
+        if (pack == null || !Files.isRegularFile(pack.path(), java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(pack.path())) {
             respond(exchange, 404, "{\"error\":\"resource_pack_not_built\"}");
             return;
         }
