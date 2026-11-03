@@ -8,75 +8,151 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.logging.Level;
 
-/** Loads explicitly installed, administrator-trusted Paper adapter JARs. */
-public final class ModAdapterLoader {
+/**
+ * Loads explicitly installed, administrator-trusted Paper adapter JARs.
+ * Each adapter archive is isolated in its own child class loader.
+ */
+public final class ModAdapterLoader implements AutoCloseable {
     private final JavaPlugin plugin;
     private final Path directory;
     private final List<LoadedAdapter> loaded = new ArrayList<>();
+    private final List<URLClassLoader> classLoaders = new ArrayList<>();
+    private boolean closed;
 
     public ModAdapterLoader(JavaPlugin plugin) throws IOException {
         this(plugin, plugin.getDataFolder().toPath().resolve("adapters"));
     }
 
     public ModAdapterLoader(JavaPlugin plugin, Path directory) throws IOException {
+        if (plugin == null) throw new IllegalArgumentException("Plugin cannot be null");
+        if (directory == null) throw new IllegalArgumentException("Adapter directory cannot be null");
         this.plugin = plugin;
         this.directory = directory.toAbsolutePath().normalize();
         Files.createDirectories(this.directory);
-        if (!Files.isDirectory(this.directory)) throw new IOException("Adapter path is not a directory: " + this.directory);
+        if (!Files.isDirectory(this.directory)) {
+            throw new IOException("Adapter path is not a directory: " + this.directory);
+        }
     }
 
-    public List<ModAdapter> load() {
-        close();
+    /** Loads valid adapter providers. One broken provider does not block other JARs. */
+    public synchronized List<ModAdapter> load() {
+        if (closed) throw new IllegalStateException("Adapter loader is already closed");
+        closeLoadedClassLoaders();
         try (var files = Files.list(directory)) {
-            files.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".jar"))
-                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+            files.filter(path -> !Files.isSymbolicLink(path))
+                    .filter(Files::isRegularFile)
+                    .filter(ModAdapterLoader::isAdapterJar)
+                    .sorted(Comparator.comparing(
+                            (Path path) -> path.getFileName().toString().toLowerCase(Locale.ROOT))
+                            .thenComparing(path -> path.getFileName().toString()))
                     .forEach(this::loadOne);
-        } catch (IOException exception) {
-            plugin.getLogger().log(Level.WARNING, "Could not scan adapter directory", exception);
+        } catch (IOException | RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Could not scan adapter directory " + directory, exception);
         }
-        return loaded.stream().map(LoadedAdapter::adapter).toList();
+        return adapters();
+    }
+
+    private static boolean isAdapterJar(Path path) {
+        return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar");
     }
 
     private void loadOne(Path jar) {
         URLClassLoader classLoader = null;
+        boolean retained = false;
         try {
             classLoader = new URLClassLoader(new java.net.URL[]{jar.toUri().toURL()},
                     ModAdapter.class.getClassLoader());
-            List<ModAdapter> providers = ServiceLoader.load(ModAdapter.class, classLoader)
-                    .stream().map(ServiceLoader.Provider::get).toList();
-            if (providers.isEmpty()) {
-                plugin.getLogger().warning("Adapter JAR has no ModAdapter service declaration: " + jar.getFileName());
-                classLoader.close();
-                return;
+            ServiceLoader<ModAdapter> services = ServiceLoader.load(ModAdapter.class, classLoader);
+            Iterator<ServiceLoader.Provider<ModAdapter>> providers = services.stream().iterator();
+            int consecutiveDiscoveryErrors = 0;
+
+            while (true) {
+                ServiceLoader.Provider<ModAdapter> provider;
+                try {
+                    if (!providers.hasNext()) break;
+                    provider = providers.next();
+                    consecutiveDiscoveryErrors = 0;
+                } catch (ServiceConfigurationError | LinkageError | RuntimeException error) {
+                    plugin.getLogger().log(Level.WARNING,
+                            "Could not read an adapter provider declaration in " + jar.getFileName(), error);
+                    if (++consecutiveDiscoveryErrors >= 8) break;
+                    continue;
+                }
+
+                try {
+                    ModAdapter adapter = provider.get();
+                    if (adapter == null) {
+                        plugin.getLogger().warning("Adapter provider returned null: " + jar.getFileName());
+                        continue;
+                    }
+                    loaded.add(new LoadedAdapter(adapter, classLoader));
+                    retained = true;
+                    plugin.getLogger().info("Loaded adapter provider '" + safeName(adapter)
+                            + "' from " + jar.getFileName());
+                } catch (ServiceConfigurationError | LinkageError | RuntimeException error) {
+                    plugin.getLogger().log(Level.WARNING,
+                            "An adapter provider could not be constructed from " + jar.getFileName()
+                                    + "; other providers will still be considered.", error);
+                }
             }
-            for (ModAdapter adapter : providers) loaded.add(new LoadedAdapter(adapter, classLoader));
-            plugin.getLogger().info("Loaded " + providers.size() + " adapter provider(s) from " + jar.getFileName());
-        } catch (Throwable error) {
-            if (classLoader != null) {
-                try { classLoader.close(); } catch (IOException ignored) { }
+
+            if (retained) classLoaders.add(classLoader);
+            else plugin.getLogger().warning("No usable ModAdapter providers found in " + jar.getFileName());
+        } catch (IOException | RuntimeException | LinkageError | ServiceConfigurationError error) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Adapter JAR could not be loaded: " + jar.getFileName(), error);
+        } finally {
+            if (!retained && classLoader != null) {
+                try {
+                    classLoader.close();
+                } catch (IOException exception) {
+                    plugin.getLogger().log(Level.FINE, "Could not close adapter class loader", exception);
+                }
             }
-            plugin.getLogger().log(Level.WARNING, "Adapter could not be loaded: " + jar.getFileName(), error);
         }
     }
 
-    public List<ModAdapter> adapters() {
+    private static String safeName(ModAdapter adapter) {
+        try {
+            String name = adapter.getName();
+            return name == null || name.isBlank() ? adapter.getClass().getName() : name;
+        } catch (RuntimeException | LinkageError exception) {
+            return adapter.getClass().getName();
+        }
+    }
+
+    public synchronized List<ModAdapter> adapters() {
         return loaded.stream().map(LoadedAdapter::adapter).toList();
     }
 
-    public void close() {
-        for (int i = loaded.size() - 1; i >= 0; i--) {
-            LoadedAdapter entry = loaded.get(i);
-            try { entry.adapter().onDisable(); }
-            catch (Throwable error) { plugin.getLogger().log(Level.WARNING, "Adapter shutdown failed", error); }
+    public Path getDirectory() {
+        return directory;
+    }
+
+    @Override
+    public synchronized void close() {
+        if (closed) return;
+        closed = true;
+        closeLoadedClassLoaders();
+        loaded.clear();
+    }
+
+    private void closeLoadedClassLoaders() {
+        for (int i = classLoaders.size() - 1; i >= 0; i--) {
+            try {
+                classLoaders.get(i).close();
+            } catch (IOException exception) {
+                plugin.getLogger().log(Level.WARNING, "Could not close an adapter class loader", exception);
+            }
         }
-        loaded.stream().map(LoadedAdapter::classLoader).distinct().forEach(loader -> {
-            try { loader.close(); } catch (IOException ignored) { }
-        });
+        classLoaders.clear();
         loaded.clear();
     }
 
