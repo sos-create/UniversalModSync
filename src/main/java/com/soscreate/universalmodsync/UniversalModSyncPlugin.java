@@ -42,7 +42,9 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         if (compatibility != null && adapterLoader != null) {
             activateAdapters(adapterLoader.load());
         } else if (adapterLoader != null) {
-            getLogger().warning("Mod scanning is unavailable; adapters were loaded but not activated.");
+            List<ModAdapter> discoveredAdapters = adapterLoader.load();
+            getLogger().warning("Mod scanning is unavailable; " + discoveredAdapters.size()
+                    + " adapter provider(s) were discovered but cannot be matched or activated.");
         }
 
         finishResourcePackInitialization();
