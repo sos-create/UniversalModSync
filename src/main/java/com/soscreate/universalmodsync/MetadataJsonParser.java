@@ -64,10 +64,8 @@ final class MetadataJsonParser {
                 skipWhitespace();
                 require(':');
                 Object value = parseValue(depth);
-                if (result.putIfAbsent(key, value) != null || (value == null && result.containsKey(key)
-                        && result.get(key) != null)) {
-                    throw error("Duplicate object key: " + key);
-                }
+                if (result.containsKey(key)) throw error("Duplicate object key: " + key);
+                result.put(key, value);
                 skipWhitespace();
                 if (consume('}')) return result;
                 require(',');
