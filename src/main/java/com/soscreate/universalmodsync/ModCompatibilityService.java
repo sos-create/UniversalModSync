@@ -172,19 +172,19 @@ public final class ModCompatibilityService {
         StringBuilder result = new StringBuilder(value.length());
         for (int index = 0; index < value.length(); index++) {
             char current = value.charAt(index);
-            if (current != '\\\\' || index + 1 >= value.length()) {
+            if (current != '\\' || index + 1 >= value.length()) {
                 result.append(current);
                 continue;
             }
             char escaped = value.charAt(++index);
             switch (escaped) {
-                case 'b' -> result.append('\\b');
-                case 't' -> result.append('\\t');
-                case 'n' -> result.append('\\n');
-                case 'f' -> result.append('\\f');
-                case 'r' -> result.append('\\r');
+                case 'b' -> result.append('\b');
+                case 't' -> result.append('\t');
+                case 'n' -> result.append('\n');
+                case 'f' -> result.append('\f');
+                case 'r' -> result.append('\r');
                 case '"' -> result.append('"');
-                case '\\\\' -> result.append('\\\\');
+                case '\\' -> result.append('\\');
                 case 'u' -> {
                     if (index + 4 < value.length()) {
                         try {
