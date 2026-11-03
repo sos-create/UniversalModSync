@@ -1,19 +1,17 @@
-# UniversalModSync is a server-side Paper adventure plugin.
-# Players do not install Forge, client mods, or a launcher.
-# Minecraft caches the optional server resource pack; players do not need to
-# remove anything after leaving the server.
+# UniversalModSync compatibility core.
+# Forge/Fabric JARs placed here are inspected, not executed by Paper.
+# A compatible Paper adapter is required to implement each mod's behavior.
+mods:
+  directory: "mods"
 
 http:
   enabled: true
-  bind-address: 0.0.0.0
+  bind-address: "0.0.0.0"
   port: 8765
 
-# Minecraft 1.21.4 resource pack format.
-# Use a public URL reachable by every player. The plugin serves the archive at
-# /v1/resource-pack.zip on the HTTP port above. HTTPS via a reverse proxy is
-# recommended for public servers.
+# Optional generic resource pack assembled from adapter-provided assets.
 resource-pack:
   enabled: true
   public-url: ""
   required: false
-  prompt: "&eThis server uses custom adventure items and dungeon visuals. Download the server pack?"
+  prompt: "&eThis server provides custom assets. Download the resource pack?"
