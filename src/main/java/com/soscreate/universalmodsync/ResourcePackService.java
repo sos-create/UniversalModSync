@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
@@ -19,6 +20,7 @@ public final class ResourcePackService {
     private static final String ARCHIVE_NAME = "resource-pack.zip";
     private final Path directory;
     private final Path archive;
+    private volatile CachedPack cachedPack;
 
     public ResourcePackService(Path pluginFolder) throws IOException {
         if (pluginFolder == null) throw new IllegalArgumentException("Plugin folder cannot be null");
@@ -82,29 +84,55 @@ public final class ResourcePackService {
             } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
                 Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
             }
+            cachedPack = null;
             return getInfo();
         } finally {
             Files.deleteIfExists(temporary);
         }
     }
 
+    /** Returns cached hash metadata unless the generated archive has changed on disk. */
     public synchronized PackInfo getInfo() throws IOException {
         if (!Files.isRegularFile(archive, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(archive)) {
+            cachedPack = null;
             return null;
         }
+
+        long currentSize = Files.size(archive);
+        FileTime currentModified = Files.getLastModifiedTime(archive, LinkOption.NOFOLLOW_LINKS);
+        CachedPack cached = cachedPack;
+        if (cached != null && cached.size() == currentSize && cached.modified().equals(currentModified)) {
+            return cached.info();
+        }
+
+        return calculateAndCacheInfo();
+    }
+
+    private PackInfo calculateAndCacheInfo() throws IOException {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            long size = 0;
-            try (InputStream input = Files.newInputStream(archive)) {
-                byte[] buffer = new byte[8192];
-                int count;
-                while ((count = input.read(buffer)) != -1) {
-                    digest.update(buffer, 0, count);
-                    size += count;
+            for (int attempt = 0; attempt < 2; attempt++) {
+                FileTime modifiedBefore = Files.getLastModifiedTime(archive, LinkOption.NOFOLLOW_LINKS);
+                MessageDigest digest = MessageDigest.getInstance("SHA-1");
+                long bytesRead = 0;
+                try (InputStream input = Files.newInputStream(archive)) {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        digest.update(buffer, 0, count);
+                        bytesRead += count;
+                    }
+                }
+
+                long sizeAfter = Files.size(archive);
+                FileTime modifiedAfter = Files.getLastModifiedTime(archive, LinkOption.NOFOLLOW_LINKS);
+                if (bytesRead == sizeAfter && modifiedBefore.equals(modifiedAfter)) {
+                    byte[] hash = digest.digest();
+                    PackInfo info = new PackInfo(archive, hash, HexFormat.of().formatHex(hash), bytesRead);
+                    cachedPack = new CachedPack(info, bytesRead, modifiedAfter);
+                    return info;
                 }
             }
-            byte[] hash = digest.digest();
-            return new PackInfo(archive, hash, HexFormat.of().formatHex(hash), size);
+            throw new IOException("Resource-pack archive changed while its hash was being calculated");
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-1 is unavailable", impossible);
         }
@@ -123,4 +151,6 @@ public final class ResourcePackService {
             return hash.clone();
         }
     }
+
+    private record CachedPack(PackInfo info, long size, FileTime modified) { }
 }
