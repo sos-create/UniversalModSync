@@ -7,6 +7,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class ResourcePackListener implements Listener {
@@ -21,7 +23,7 @@ public final class ResourcePackListener implements Listener {
                                 String prompt, boolean required, Logger logger) {
         this.resourcePacks = resourcePacks;
         this.enabled = enabled;
-        this.publicUrl = publicUrl == null ? "" : publicUrl.trim();
+        this.publicUrl = validateUrl(publicUrl, logger);
         this.prompt = prompt == null || prompt.isBlank()
                 ? "This server provides custom assets through a server resource pack."
                 : prompt;
@@ -29,19 +31,40 @@ public final class ResourcePackListener implements Listener {
         this.logger = logger;
     }
 
+    private static String validateUrl(String value, Logger logger) {
+        if (value == null || value.isBlank()) return "";
+        try {
+            URI uri = URI.create(value.trim());
+            String scheme = uri.getScheme();
+            if (uri.getHost() == null || uri.getHost().isBlank()
+                    || uri.getUserInfo() != null
+                    || scheme == null
+                    || !(scheme.equalsIgnoreCase("https") || scheme.equalsIgnoreCase("http"))) {
+                throw new IllegalArgumentException("URL must be an absolute HTTP(S) URL without user information");
+            }
+            return uri.toASCIIString();
+        } catch (IllegalArgumentException exception) {
+            if (logger != null) logger.warning("Resource-pack public URL is invalid; automatic delivery is disabled: "
+                    + exception.getMessage());
+            return "";
+        }
+    }
+
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        if (!enabled || publicUrl.isBlank()) return;
+        if (!enabled || publicUrl.isBlank() || resourcePacks == null) return;
         Player player = event.getPlayer();
         try {
             ResourcePackService.PackInfo pack = resourcePacks.getInfo();
             if (pack == null) {
-                logger.warning("Resource pack archive is missing; run /modsync reload.");
+                logger.warning("Resource-pack archive is missing; run /modsync reload after adding pack assets.");
                 return;
             }
-            player.setResourcePack(publicUrl, pack.hash(), ChatColor.translateAlternateColorCodes('&', prompt), required);
-        } catch (IOException exception) {
-            logger.warning("Could not prepare resource pack for " + player.getName() + ": " + exception.getMessage());
+            player.setResourcePack(publicUrl, pack.hash(),
+                    ChatColor.translateAlternateColorCodes('&', prompt), required);
+        } catch (IOException | RuntimeException exception) {
+            logger.log(Level.WARNING,
+                    "Could not send the resource pack to player " + player.getName() + ".", exception);
         }
     }
 }
