@@ -150,7 +150,7 @@ public final class ModCompatibilityService {
                 if (current != null) result.add(current.toString());
                 current = header.group(1).trim().equals(tableName) ? new StringBuilder() : null;
             } else if (current != null) {
-                current.append(line).append('\\n');
+                current.append(line).append('\n');
             }
         }
         if (current != null) result.add(current.toString());
@@ -216,7 +216,7 @@ public final class ModCompatibilityService {
                 }
                 current = header.group(1).trim().equals(target) ? new StringBuilder() : null;
             } else if (current != null) {
-                current.append(line).append('\\n');
+                current.append(line).append('\n');
             }
         }
         if (current != null) {
