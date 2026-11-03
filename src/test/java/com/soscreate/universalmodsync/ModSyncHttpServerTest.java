@@ -71,13 +71,9 @@ class ModSyncHttpServerTest {
         packs.rebuild();
         ModSyncHttpServer server = new ModSyncHttpServer(
                 new InetSocketAddress("127.0.0.1", 0), packs);
-        InetSocketAddress bound = server.getAddress();
-
+        assertNull(server.getAddress(), "The socket must not bind before start().");
         assertDoesNotThrow(server::close);
-        try (java.net.ServerSocket probe = new java.net.ServerSocket()) {
-            probe.setReuseAddress(false);
-            assertDoesNotThrow(() -> probe.bind(bound));
-        }
+        assertDoesNotThrow(server::close);
     }
 
     @Test
