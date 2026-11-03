@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 public final class UniversalModSyncPlugin extends JavaPlugin {
     private ModPackService modPackService;
     private ModSyncHttpServer httpServer;
+    private ResourcePackService resourcePacks;
     private ScheduledExecutorService scanner;
 
     @Override
@@ -28,10 +29,21 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             modPackService = new ModPackService(modsDirectory, getLogger(),
                     getConfig().getBoolean("mods.include-unrecognized-jars", false));
             ModPackService.RefreshResult initial = modPackService.refresh();
+            resourcePacks = new ResourcePackService(getDataFolder().toPath());
+            ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
+            getServer().getPluginManager().registerEvents(new ResourcePackListener(resourcePacks,
+                    getConfig().getString("resource-pack.public-url", ""),
+                    getConfig().getString("resource-pack.prompt", ""),
+                    getConfig().getBoolean("resource-pack.required", false), getLogger()), this);
             startHttpServer();
             startFolderScanner();
             getLogger().info("UniversalModSync enabled for CLIENT-SINGLEPLAYER Forge modpacks.");
             getLogger().info("Published client mods: " + initial.modCount());
+            getLogger().info("Server resource pack built: " + packInfo.size() + " bytes (SHA-1 " + packInfo.sha1() + ").");
+            getLogger().info("Resource pack files: " + resourcePacks.getDirectory());
+            if (getConfig().getString("resource-pack.public-url", "").isBlank()) {
+                getLogger().warning("Set resource-pack.public-url to a publicly reachable URL ending in /v1/resource-pack.zip to send the pack to players.");
+            }
             getLogger().info("Place client Forge JARs in: " + modsDirectory);
             getLogger().info("Paper distributes these files; it does not execute Forge mods.");
         } catch (Exception exception) {
@@ -88,13 +100,15 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             sender.sendMessage(ChatColor.GRAY + "Mods folder: " + getDataFolder().toPath().resolve("mods"));
             sender.sendMessage(ChatColor.GRAY + "Manifest revision: " + modPackService.getRevision());
             sender.sendMessage(ChatColor.GRAY + "HTTP: " + (httpServer == null ? "disabled" : "enabled"));
+            sender.sendMessage(ChatColor.GRAY + "Resource pack: " + (resourcePacks == null ? "not built" : "built"));
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             try {
                 ModPackService.RefreshResult result = modPackService.refresh();
-                sender.sendMessage(ChatColor.GREEN + "Client pack refreshed. Mods: " + result.modCount()
-                        + ", revision: " + result.revision());
+                ResourcePackService.PackInfo pack = resourcePacks.rebuild();
+                sender.sendMessage(ChatColor.GREEN + "Pack refreshed. Legacy Forge files: " + result.modCount()
+                        + ", resource pack: " + pack.size() + " bytes, SHA-1: " + pack.sha1());
             } catch (IOException exception) {
                 sender.sendMessage(ChatColor.RED + "Refresh failed: " + exception.getMessage());
             }
