@@ -29,10 +29,15 @@ public final class ModCompatibilityService {
     private List<ModDescriptor> lastMods = List.of();
 
     public ModCompatibilityService(JavaPlugin plugin) throws IOException {
-        this(plugin, plugin.getDataFolder().toPath().resolve("mods"));
+        this(plugin.getDataFolder().toPath().resolve("mods"));
     }
 
     public ModCompatibilityService(JavaPlugin plugin, Path directory) throws IOException {
+        this(directory);
+    }
+
+    /** Constructor used by tests and standalone metadata inspection. */
+    public ModCompatibilityService(Path directory) throws IOException {
         modsDirectory = directory.toAbsolutePath().normalize();
         Files.createDirectories(modsDirectory);
         if (!Files.isDirectory(modsDirectory)) throw new IOException("Mods path is not a directory: " + modsDirectory);
