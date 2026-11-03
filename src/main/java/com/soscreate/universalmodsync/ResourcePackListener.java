@@ -11,14 +11,16 @@ import java.util.logging.Logger;
 
 public final class ResourcePackListener implements Listener {
     private final ResourcePackService resourcePacks;
+    private final boolean enabled;
     private final String publicUrl;
     private final String prompt;
     private final boolean required;
     private final Logger logger;
 
-    public ResourcePackListener(ResourcePackService resourcePacks, String publicUrl,
+    public ResourcePackListener(ResourcePackService resourcePacks, boolean enabled, String publicUrl,
                                 String prompt, boolean required, Logger logger) {
         this.resourcePacks = resourcePacks;
+        this.enabled = enabled;
         this.publicUrl = publicUrl == null ? "" : publicUrl.trim();
         this.prompt = prompt == null || prompt.isBlank()
                 ? "This server uses custom items, creatures and dungeon visuals."
@@ -29,7 +31,7 @@ public final class ResourcePackListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        if (publicUrl.isBlank()) return;
+        if (!enabled || publicUrl.isBlank()) return;
         Player player = event.getPlayer();
         try {
             ResourcePackService.PackInfo pack = resourcePacks.getInfo();
