@@ -1,35 +1,32 @@
-# This Paper plugin distributes mods to Forge clients.
-# It does not load or execute Forge mods on the Paper server.
+# UniversalModSync is a Paper gameplay plugin.
+# It creates server-side items, mobs and dungeons. Players do NOT install mods.
+# The optional resource pack is downloaded and cached by Minecraft for this server;
+# it is not placed in the mods folder and does not need manual deletion.
+
 http:
   enabled: true
   bind-address: 0.0.0.0
   port: 8765
 
-# Files in plugins/UniversalModSync/mods are installed into the player's
-# Forge client mods folder by the companion launcher.
+# Legacy Forge mod manifest support. It is not used for the server-side gameplay
+# system and does not make Forge mods run on Paper.
 mods:
   scan-interval-seconds: 10
   include-unrecognized-jars: false
 
-# Pack metadata sent to the client launcher.
-# Use exact versions that the players must install.
 pack:
-  name: "UniversalModSync Client Pack"
-  target: "CLIENT_SINGLEPLAYER"
-  loader: "forge"
+  name: "UniversalModSync Server Adventure Pack"
+  target: "PAPER_SERVER"
+  loader: "none"
   minecraft-version: "1.21.4"
-  forge-version: "54.1.0"
+  forge-version: "not-required"
 
-# Client-only/singleplayer mode means these mods are installed on each player's
-# Forge game client. A singleplayer world runs its integrated server inside
-# that client. Paper remains only a pack distribution endpoint.
-
-# Resource pack is cached by Minecraft and automatically selected only on this server.
-# It is NOT copied into the player's mods folder and players do not need to delete it.
-# Put custom assets under plugins/UniversalModSync/resource-pack/.
-# Set this URL to the public address of your server's HTTP endpoint.
+# Minecraft caches the server resource pack after download.
+# Players do not need to delete it after leaving.
+# Replace the URL with the public HTTPS URL reachable by your players.
+# Example: https://your-domain.example:8765/v1/resource-pack.zip
 resource-pack:
   enabled: true
   public-url: ""
   required: false
-  prompt: "&eThis server offers custom items, mobs and dungeon visuals. Accept the resource pack?"
+  prompt: "&eThis server uses custom adventure items and dungeon visuals. Download the server pack?"
