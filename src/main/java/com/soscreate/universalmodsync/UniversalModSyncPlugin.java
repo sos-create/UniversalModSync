@@ -37,14 +37,15 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
 
         initializeModScanner();
         initializeAdapterLoader();
+        initializeResourcePackStorage();
+
         if (compatibility != null && adapterLoader != null) {
             activateAdapters(adapterLoader.load());
         } else if (adapterLoader != null) {
-            // Keep provider discovery available even when the mod directory is temporarily unavailable.
             getLogger().warning("Mod scanning is unavailable; adapters were loaded but not activated.");
         }
 
-        initializeResourcePack();
+        finishResourcePackInitialization();
         startHttpServer();
 
         getLogger().info("UniversalModSync started. Detected descriptors: " + detectedMods.size()
@@ -78,32 +79,38 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         }
     }
 
-    private void initializeResourcePack() {
+    private void initializeResourcePackStorage() {
         try {
+            // Create the resource-pack directory before adapters start so they can add assets.
             resourcePacks = new ResourcePackService(getDataFolder().toPath());
-            try {
-                ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
-                getLogger().info("Resource pack built: " + packInfo.size() + " bytes, SHA-1 " + packInfo.sha1());
-            } catch (IOException | RuntimeException exception) {
-                getLogger().log(Level.WARNING,
-                        "Resource pack could not be built. Mod discovery and adapters remain available.", exception);
-            }
-
-            try {
-                getServer().getPluginManager().registerEvents(new ResourcePackListener(
-                        resourcePacks,
-                        getConfig().getBoolean("resource-pack.enabled", true),
-                        getConfig().getString("resource-pack.public-url", ""),
-                        getConfig().getString("resource-pack.prompt", ""),
-                        getConfig().getBoolean("resource-pack.required", false),
-                        getLogger()), this);
-            } catch (RuntimeException | LinkageError exception) {
-                getLogger().log(Level.WARNING, "Resource pack join listener could not be registered.", exception);
-            }
         } catch (IOException | RuntimeException | LinkageError exception) {
             resourcePacks = null;
             getLogger().log(Level.WARNING,
-                    "Resource pack storage could not be initialized. Other plugin features remain available.", exception);
+                    "Resource-pack storage could not be initialized. Other plugin features remain available.", exception);
+        }
+    }
+
+    private void finishResourcePackInitialization() {
+        if (resourcePacks == null) return;
+
+        try {
+            ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
+            getLogger().info("Resource pack built: " + packInfo.size() + " bytes, SHA-1 " + packInfo.sha1());
+        } catch (IOException | RuntimeException exception) {
+            getLogger().log(Level.WARNING,
+                    "Resource pack could not be built. Mod discovery and adapters remain available.", exception);
+        }
+
+        try {
+            getServer().getPluginManager().registerEvents(new ResourcePackListener(
+                    resourcePacks,
+                    getConfig().getBoolean("resource-pack.enabled", true),
+                    getConfig().getString("resource-pack.public-url", ""),
+                    getConfig().getString("resource-pack.prompt", ""),
+                    getConfig().getBoolean("resource-pack.required", false),
+                    getLogger()), this);
+        } catch (RuntimeException | LinkageError exception) {
+            getLogger().log(Level.WARNING, "Resource pack join listener could not be registered.", exception);
         }
     }
 
