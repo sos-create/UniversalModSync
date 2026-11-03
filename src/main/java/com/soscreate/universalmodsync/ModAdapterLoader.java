@@ -19,9 +19,14 @@ public final class ModAdapterLoader {
     private final List<LoadedAdapter> loaded = new ArrayList<>();
 
     public ModAdapterLoader(JavaPlugin plugin) throws IOException {
+        this(plugin, plugin.getDataFolder().toPath().resolve("adapters"));
+    }
+
+    public ModAdapterLoader(JavaPlugin plugin, Path directory) throws IOException {
         this.plugin = plugin;
-        directory = plugin.getDataFolder().toPath().resolve("adapters").toAbsolutePath().normalize();
-        Files.createDirectories(directory);
+        this.directory = directory.toAbsolutePath().normalize();
+        Files.createDirectories(this.directory);
+        if (!Files.isDirectory(this.directory)) throw new IOException("Adapter path is not a directory: " + this.directory);
     }
 
     public List<ModAdapter> load() {
