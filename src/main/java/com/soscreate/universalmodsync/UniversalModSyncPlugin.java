@@ -7,74 +7,41 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 
 public final class UniversalModSyncPlugin extends JavaPlugin {
-    private ModPackService modPackService;
     private ModSyncHttpServer httpServer;
     private ResourcePackService resourcePacks;
     private AdventureContentService adventureContent;
-    private ScheduledExecutorService scanner;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        Path modsDirectory = getDataFolder().toPath().resolve("mods");
         try {
-            Files.createDirectories(modsDirectory);
-            modPackService = new ModPackService(modsDirectory, getLogger(),
-                    getConfig().getBoolean("mods.include-unrecognized-jars", false));
-            ModPackService.RefreshResult initial = modPackService.refresh();
             resourcePacks = new ResourcePackService(getDataFolder().toPath());
+            ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
+
             adventureContent = new AdventureContentService(this);
             getServer().getPluginManager().registerEvents(adventureContent, this);
-            ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
-            getServer().getPluginManager().registerEvents(new ResourcePackListener(resourcePacks,
+            getServer().getPluginManager().registerEvents(new ResourcePackListener(
+                    resourcePacks,
                     getConfig().getBoolean("resource-pack.enabled", true),
                     getConfig().getString("resource-pack.public-url", ""),
                     getConfig().getString("resource-pack.prompt", ""),
-                    getConfig().getBoolean("resource-pack.required", false), getLogger()), this);
+                    getConfig().getBoolean("resource-pack.required", false),
+                    getLogger()), this);
+
             startHttpServer();
-            startFolderScanner();
-            getLogger().info("UniversalModSync enabled: Paper server-side adventure content.");
-            getLogger().info("Legacy client mod manifest entries: " + initial.modCount() + " (not installed on players).");
-            getLogger().info("Server resource pack built: " + packInfo.size() + " bytes (SHA-1 " + packInfo.sha1() + ").");
-            getLogger().info("Resource pack files: " + resourcePacks.getDirectory());
+            getLogger().info("UniversalModSync enabled: server-side Paper adventure system.");
+            getLogger().info("Built-in adventure items, dungeon, guardian and locked vault are ready.");
+            getLogger().info("Resource pack archive: " + packInfo.size() + " bytes; SHA-1 " + packInfo.sha1());
             if (getConfig().getString("resource-pack.public-url", "").isBlank()) {
-                getLogger().warning("Set resource-pack.public-url to a publicly reachable URL ending in /v1/resource-pack.zip to send the pack to players.");
+                getLogger().warning("Set resource-pack.public-url to the public URL ending in /v1/resource-pack.zip; players will not receive custom textures until it is configured.");
             }
-            getLogger().info("Players do not need Forge or client-side mods.");
-            getLogger().info("Paper distributes these files; it does not execute Forge mods.");
+            getLogger().info("Players do not need Forge, client mods, a launcher, or manual cleanup after leaving.");
         } catch (Exception exception) {
             getLogger().severe("UniversalModSync could not start: " + exception.getMessage());
             getServer().getPluginManager().disablePlugin(this);
         }
-    }
-
-    private void startFolderScanner() {
-        int interval = Math.max(5, getConfig().getInt("mods.scan-interval-seconds", 10));
-        ThreadFactory factory = task -> {
-            Thread thread = new Thread(task, "UniversalModSync-Scanner");
-            thread.setDaemon(true);
-            return thread;
-        };
-        scanner = Executors.newSingleThreadScheduledExecutor(factory);
-        scanner.scheduleWithFixedDelay(() -> {
-            try {
-                ModPackService.RefreshResult result = modPackService.refresh();
-                if (result.changed()) {
-                    getLogger().info("Client modpack changed. Published " + result.modCount()
-                            + " mod(s); manifest revision " + result.revision());
-                }
-            } catch (Exception exception) {
-                getLogger().warning("Could not refresh mod folder: " + exception.getMessage());
-            }
-        }, interval, interval, TimeUnit.SECONDS);
     }
 
     private void startHttpServer() throws IOException {
@@ -82,13 +49,9 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         String address = getConfig().getString("http.bind-address", "0.0.0.0");
         int port = getConfig().getInt("http.port", 8765);
         if (port < 1 || port > 65535) throw new IOException("Invalid HTTP port: " + port);
-        httpServer = new ModSyncHttpServer(new InetSocketAddress(address, port), modPackService,
-                getLogger(), getDescription().getVersion(),
-                getConfig().getString("pack.name", "UniversalModSync Client Pack"),
-                getConfig().getString("pack.minecraft-version", "unspecified"),
-                getConfig().getString("pack.forge-version", "unspecified"), resourcePacks);
+        httpServer = new ModSyncHttpServer(new InetSocketAddress(address, port), resourcePacks);
         httpServer.start();
-        getLogger().info("ModSync HTTP endpoint listening on " + address + ":" + port);
+        getLogger().info("Resource pack HTTP endpoint listening on " + address + ":" + port);
     }
 
     @Override
@@ -98,34 +61,39 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             sender.sendMessage(ChatColor.RED + "You do not have permission.");
             return true;
         }
+
         if (adventureContent != null && adventureContent.handleCommand(sender, args)) return true;
+
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             sender.sendMessage(ChatColor.GREEN + "UniversalModSync server adventure system is running.");
-            sender.sendMessage(ChatColor.GRAY + "Server-side content: items, dungeon and boss.");
-            sender.sendMessage(ChatColor.GRAY + "Mods folder: " + getDataFolder().toPath().resolve("mods"));
-            sender.sendMessage(ChatColor.GRAY + "Manifest revision: " + modPackService.getRevision());
-            sender.sendMessage(ChatColor.GRAY + "HTTP: " + (httpServer == null ? "disabled" : "enabled"));
-            sender.sendMessage(ChatColor.GRAY + "Resource pack: " + (resourcePacks == null ? "not built" : "built"));
+            sender.sendMessage(ChatColor.GRAY + "Content: Ember Blade, Healing Orb, Dungeon Key, Ashen Warden dungeon.");
+            sender.sendMessage(ChatColor.GRAY + "HTTP endpoint: " + (httpServer == null ? "disabled" : "enabled"));
+            sender.sendMessage(ChatColor.GRAY + "Resource pack delivery: "
+                    + (getConfig().getBoolean("resource-pack.enabled", true) ? "enabled" : "disabled"));
+            sender.sendMessage(ChatColor.GRAY + "Public URL configured: "
+                    + !getConfig().getString("resource-pack.public-url", "").isBlank());
             return true;
         }
+
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             try {
-                ModPackService.RefreshResult result = modPackService.refresh();
                 ResourcePackService.PackInfo pack = resourcePacks.rebuild();
-                sender.sendMessage(ChatColor.GREEN + "Server resource pack rebuilt. Legacy manifest entries: " + result.modCount()
-                        + ", resource pack: " + pack.size() + " bytes, SHA-1: " + pack.sha1());
+                sender.sendMessage(ChatColor.GREEN + "Resource pack rebuilt. Size: " + pack.size()
+                        + " bytes; SHA-1: " + pack.sha1());
+                sender.sendMessage(ChatColor.GRAY + "Players will receive the updated pack when they join again.");
             } catch (IOException exception) {
-                sender.sendMessage(ChatColor.RED + "Refresh failed: " + exception.getMessage());
+                sender.sendMessage(ChatColor.RED + "Resource pack rebuild failed: " + exception.getMessage());
             }
             return true;
         }
-        sender.sendMessage(ChatColor.YELLOW + "Usage: /modsync <status|reload|dungeon|boss|give <player> <ember_blade|healing_orb|dungeon_key>>");
+
+        sender.sendMessage(ChatColor.YELLOW
+                + "Usage: /modsync <status|reload|dungeon|boss|give <player> <ember_blade|healing_orb|dungeon_key>>");
         return true;
     }
 
     @Override
     public void onDisable() {
-        if (scanner != null) scanner.shutdownNow();
         if (httpServer != null) httpServer.stop();
     }
 }
