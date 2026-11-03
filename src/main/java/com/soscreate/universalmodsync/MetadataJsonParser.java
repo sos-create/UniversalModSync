@@ -92,19 +92,19 @@ final class MetadataJsonParser {
                 char current = source.charAt(position++);
                 if (current == '"') return result.toString();
                 if (current < 0x20) throw error("Unescaped control character in string");
-                if (current != '\\\\') {
+                if (current != '\\') {
                     result.append(current);
                     continue;
                 }
                 if (position >= source.length()) throw error("Incomplete escape sequence");
                 char escaped = source.charAt(position++);
                 switch (escaped) {
-                    case '"', '\\\\', '/' -> result.append(escaped);
-                    case 'b' -> result.append('\\b');
-                    case 'f' -> result.append('\\f');
-                    case 'n' -> result.append('\\n');
-                    case 'r' -> result.append('\\r');
-                    case 't' -> result.append('\\t');
+                    case '"', '\\', '/' -> result.append(escaped);
+                    case 'b' -> result.append('\b');
+                    case 'f' -> result.append('\f');
+                    case 'n' -> result.append('\n');
+                    case 'r' -> result.append('\r');
+                    case 't' -> result.append('\t');
                     case 'u' -> result.append(parseUnicodeEscape());
                     default -> throw error("Invalid escape sequence");
                 }
