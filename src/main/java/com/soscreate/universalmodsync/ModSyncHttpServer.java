@@ -60,6 +60,10 @@ public final class ModSyncHttpServer implements AutoCloseable {
         }
     }
 
+    public InetSocketAddress getAddress() {
+        return server.getAddress();
+    }
+
     @Override
     public void close() {
         stop();
