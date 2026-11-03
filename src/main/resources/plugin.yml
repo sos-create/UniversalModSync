@@ -1,0 +1,15 @@
+name: UniversalModSync
+version: '${version}'
+main: com.soscreate.universalmodsync.UniversalModSyncPlugin
+api-version: '1.21'
+author: sos-create
+description: Manages and serves a verified client modpack manifest for external launchers.
+commands:
+  modsync:
+    description: Universal ModSync administration
+    usage: /modsync <status|reload>
+    permission: universalmodsync.admin
+permissions:
+  universalmodsync.admin:
+    description: Allows administration of Universal ModSync
+    default: op
