@@ -32,6 +32,13 @@ class ModAdapterMatchingTest {
     }
 
     @Test
+    void matchesZipArchivesButRejectsNonArchiveNames() {
+        assertTrue(ModAdapter.targetsFile(Set.of("CustomPack.ZIP"), "custompack.zip"));
+        assertFalse(ModAdapter.targetsFile(Set.of("CustomPack.txt"), "CustomPack.txt"));
+        assertFalse(ModAdapter.targetsFile(Set.of("CustomPack.zip"), "folder/CustomPack.zip"));
+    }
+
+    @Test
     void handlesEmptyAndNullInputsSafely() {
         assertFalse(ModAdapter.targetsFile(null, "ExampleMod-1.2.0.jar"));
         assertFalse(ModAdapter.targetsFile(Set.of(), "ExampleMod-1.2.0.jar"));
