@@ -1,14 +1,25 @@
-# HTTP endpoint used by the companion client launcher.
-# Do not expose this endpoint to the public internet without HTTPS/authentication.
+# This Paper plugin distributes mods to Forge clients.
+# It does not load or execute Forge mods on the Paper server.
 http:
   enabled: true
   bind-address: 0.0.0.0
   port: 8765
 
-# JAR files placed in plugins/UniversalModSync/mods are detected automatically.
-# The folder is scanned in the background; changes appear in the client manifest.
+# Files in plugins/UniversalModSync/mods are installed into the player's
+# Forge client mods folder by the companion launcher.
 mods:
   scan-interval-seconds: 10
+  include-unrecognized-jars: false
 
-# Paper does NOT load Forge mods. This plugin publishes mod files and metadata
-# for a compatible Forge client launcher to install on players' computers.
+# Pack metadata sent to the client launcher.
+# Use exact versions that the players must install.
+pack:
+  name: "UniversalModSync Client Pack"
+  target: "CLIENT_SINGLEPLAYER"
+  loader: "forge"
+  minecraft-version: "1.21.4"
+  forge-version: "54.1.0"
+
+# Client-only/singleplayer mode means these mods are installed on each player's
+# Forge game client. A singleplayer world runs its integrated server inside
+# that client. Paper remains only a pack distribution endpoint.
