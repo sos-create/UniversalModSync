@@ -31,11 +31,13 @@ import java.util.Random;
 public final class AdventureContentService implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey itemId;
+    private final NamespacedKey lockedChestKey;
     private final Random random = new Random();
 
     public AdventureContentService(JavaPlugin plugin) {
         this.plugin = plugin;
         this.itemId = new NamespacedKey(plugin, "adventure_item");
+        this.lockedChestKey = new NamespacedKey(plugin, "locked_dungeon_chest");
     }
 
     public boolean handleCommand(CommandSender sender, String[] args) {
@@ -153,8 +155,22 @@ public final class AdventureContentService implements Listener {
             player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.5f);
             consumeOne(player, hand);
         } else if (id.equals("dungeon_key")) {
-            event.setCancelled(true);
-            player.sendMessage(ChatColor.YELLOW + "The ancient key hums. Search the dungeon for a sealed treasure chest.");
+            Block clicked = event.getClickedBlock();
+            if (clicked != null && clicked.getState() instanceof Chest chest
+                    && chest.getPersistentDataContainer().has(lockedChestKey, PersistentDataType.BYTE)) {
+                event.setCancelled(true);
+                chest.getPersistentDataContainer().remove(lockedChestKey);
+                chest.getBlockInventory().addItem(createItem("ember_blade"));
+                chest.getBlockInventory().addItem(new ItemStack(Material.DIAMOND, 3 + random.nextInt(5)));
+                chest.getBlockInventory().addItem(createItem("healing_orb"));
+                chest.update(true, false);
+                consumeOne(player, hand);
+                player.openInventory(chest.getBlockInventory());
+                player.sendMessage(ChatColor.GOLD + "You unlocked the ancient vault!");
+            } else {
+                event.setCancelled(true);
+                player.sendMessage(ChatColor.YELLOW + "Find the sealed vault chest inside a dungeon.");
+            }
         }
     }
 
@@ -197,6 +213,12 @@ public final class AdventureContentService implements Listener {
             }
         }
 
+        Block vaultBlock = world.getBlockAt(cx, cy + 1, cz - 5);
+        vaultBlock.setType(Material.CHEST, false);
+        if (vaultBlock.getState() instanceof Chest vault) {
+            vault.getPersistentDataContainer().set(lockedChestKey, PersistentDataType.BYTE, (byte) 1);
+            vault.update(true, false);
+        }
         world.getBlockAt(cx, cy + 1, cz - 6).setType(Material.SOUL_LANTERN, false);
         world.getBlockAt(cx, cy + 1, cz + 6).setType(Material.SOUL_LANTERN, false);
         player.teleport(new Location(world, cx + 0.5, cy + 1, cz + 0.5, player.getLocation().getYaw(), player.getLocation().getPitch()));
