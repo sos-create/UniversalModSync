@@ -23,7 +23,7 @@ import java.util.zip.ZipFile;
 public final class ModPackService {
     private static final Pattern TOML_SECTION = Pattern.compile("(?m)^\\[\\[([^]]+)]]\\s*$");
     private static final Pattern TOML_VALUE = Pattern.compile("(?m)^\\s*([A-Za-z0-9_.-]+)\\s*=\\s*(.*?)\\s*$");
-    private static final Pattern QUOTED = Pattern.compile("^\\"(.*)\\"$");
+    private static final Pattern QUOTED = Pattern.compile("^\"(.*)\"$");
 
     private final Path modsDirectory;
     private final Logger logger;
