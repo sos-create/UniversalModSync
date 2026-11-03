@@ -25,12 +25,15 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         Path modsDirectory = getDataFolder().toPath().resolve("mods");
         try {
             Files.createDirectories(modsDirectory);
-            modPackService = new ModPackService(modsDirectory, getLogger());
+            modPackService = new ModPackService(modsDirectory, getLogger(),
+                    getConfig().getBoolean("mods.include-unrecognized-jars", false));
             ModPackService.RefreshResult initial = modPackService.refresh();
             startHttpServer();
             startFolderScanner();
-            getLogger().info("UniversalModSync enabled. Published Forge JARs: " + initial.modCount());
-            getLogger().info("Place client Forge mods in: " + modsDirectory);
+            getLogger().info("UniversalModSync enabled for CLIENT-SINGLEPLAYER Forge modpacks.");
+            getLogger().info("Published client mods: " + initial.modCount());
+            getLogger().info("Place client Forge JARs in: " + modsDirectory);
+            getLogger().info("Paper distributes these files; it does not execute Forge mods.");
         } catch (Exception exception) {
             getLogger().severe("UniversalModSync could not start: " + exception.getMessage());
             getServer().getPluginManager().disablePlugin(this);
@@ -49,8 +52,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             try {
                 ModPackService.RefreshResult result = modPackService.refresh();
                 if (result.changed()) {
-                    getLogger().info("Mod folder changed. Published " + result.modCount()
-                            + " Forge mod(s); manifest revision " + result.revision());
+                    getLogger().info("Client modpack changed. Published " + result.modCount()
+                            + " mod(s); manifest revision " + result.revision());
                 }
             } catch (Exception exception) {
                 getLogger().warning("Could not refresh mod folder: " + exception.getMessage());
@@ -63,8 +66,11 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         String address = getConfig().getString("http.bind-address", "0.0.0.0");
         int port = getConfig().getInt("http.port", 8765);
         if (port < 1 || port > 65535) throw new IOException("Invalid HTTP port: " + port);
-        httpServer = new ModSyncHttpServer(
-                new InetSocketAddress(address, port), modPackService, getLogger(), getDescription().getVersion());
+        httpServer = new ModSyncHttpServer(new InetSocketAddress(address, port), modPackService,
+                getLogger(), getDescription().getVersion(),
+                getConfig().getString("pack.name", "UniversalModSync Client Pack"),
+                getConfig().getString("pack.minecraft-version", "unspecified"),
+                getConfig().getString("pack.forge-version", "unspecified"));
         httpServer.start();
         getLogger().info("ModSync HTTP endpoint listening on " + address + ":" + port);
     }
@@ -77,8 +83,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
-            sender.sendMessage(ChatColor.GREEN + "UniversalModSync is running.");
-            sender.sendMessage(ChatColor.GRAY + "Published Forge JARs: " + modPackService.getEntries().size());
+            sender.sendMessage(ChatColor.GREEN + "UniversalModSync client pack is running.");
+            sender.sendMessage(ChatColor.GRAY + "Client mods: " + modPackService.getEntries().size());
             sender.sendMessage(ChatColor.GRAY + "Mods folder: " + getDataFolder().toPath().resolve("mods"));
             sender.sendMessage(ChatColor.GRAY + "Manifest revision: " + modPackService.getRevision());
             sender.sendMessage(ChatColor.GRAY + "HTTP: " + (httpServer == null ? "disabled" : "enabled"));
@@ -87,7 +93,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             try {
                 ModPackService.RefreshResult result = modPackService.refresh();
-                sender.sendMessage(ChatColor.GREEN + "Manifest refreshed. Forge JARs: " + result.modCount()
+                sender.sendMessage(ChatColor.GREEN + "Client pack refreshed. Mods: " + result.modCount()
                         + ", revision: " + result.revision());
             } catch (IOException exception) {
                 sender.sendMessage(ChatColor.RED + "Refresh failed: " + exception.getMessage());
