@@ -11,7 +11,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.logging.Level;
 
@@ -96,7 +95,7 @@ public final class ModAdapterLoader implements AutoCloseable {
                         plugin.getLogger().warning("Adapter provider returned null: " + jar.getFileName());
                         continue;
                     }
-                    loaded.add(new LoadedAdapter(adapter, classLoader));
+                    loaded.add(new LoadedAdapter(adapter));
                     retained = true;
                     plugin.getLogger().info("Loaded adapter provider '" + safeName(adapter)
                             + "' from " + jar.getFileName());
@@ -168,5 +167,5 @@ public final class ModAdapterLoader implements AutoCloseable {
         loaded.clear();
     }
 
-    private record LoadedAdapter(ModAdapter adapter, URLClassLoader classLoader) { }
+    private record LoadedAdapter(ModAdapter adapter) { }
 }
