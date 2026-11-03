@@ -65,33 +65,35 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         Set<String> implemented = new HashSet<>();
         for (ModAdapter adapter : adapters) {
             try {
-                Set<String> declared = adapter.supportedMods();
+                Set<String> declared = adapter.supportedModFiles();
                 if (declared == null || declared.isEmpty()) {
-                    getLogger().warning("Adapter '" + adapter.getName() + "' declares no supported mod IDs.");
+                    getLogger().warning("Adapter '" + adapter.getName() + "' declares no target mod archive file names.");
                     continue;
                 }
-                Set<String> ids = new HashSet<>();
-                for (String id : declared) {
-                    if (id != null && !id.isBlank()) ids.add(id.trim().toLowerCase(Locale.ROOT));
-                }
                 List<ModDescriptor> matching = detectedMods.stream()
-                        .filter(mod -> ids.contains(mod.modId().toLowerCase(Locale.ROOT)))
+                        .filter(mod -> ModAdapter.targetsFile(declared, mod.fileName()))
                         .toList();
-                if (matching.isEmpty()) continue;
+                if (matching.isEmpty()) {
+                    getLogger().fine("Adapter '" + adapter.getName() + "' did not find its target archive(s).");
+                    continue;
+                }
                 adapter.onEnable(this, matching);
-                matching.forEach(mod -> implemented.add(mod.modId().toLowerCase(Locale.ROOT)));
-                getLogger().info("Adapter '" + adapter.getName() + "' activated for " + matching.size() + " mod(s).");
+                matching.forEach(mod -> implemented.add(mod.fileName().toLowerCase(Locale.ROOT)));
+                getLogger().info("Adapter '" + adapter.getName() + "' activated for " + matching.size()
+                        + " matching archive(s): " + matching.stream().map(ModDescriptor::fileName).toList());
             } catch (Throwable error) {
                 getLogger().log(java.util.logging.Level.SEVERE,
                         "Adapter activation failed; server startup will continue: " + adapter.getClass().getName(), error);
             }
         }
         for (ModDescriptor mod : detectedMods) {
-            String id = mod.modId().toLowerCase(Locale.ROOT);
+            String fileName = mod.fileName().toLowerCase(Locale.ROOT);
             if (mod.compatibility().equals("CLIENT_ONLY_NOT_RUNNABLE_ON_PAPER")) {
-                getLogger().warning(mod.modId() + ": client-only mod; cannot run on Paper.");
-            } else if (!implemented.contains(id)) {
-                getLogger().warning(mod.modId() + ": detected, but no Paper adapter is installed.");
+                getLogger().warning(mod.fileName() + " (" + mod.modId()
+                        + "): client-only mod; cannot run on Paper.");
+            } else if (!implemented.contains(fileName)) {
+                getLogger().warning(mod.fileName() + " (" + mod.modId()
+                        + "): detected, but no adapter targets this exact archive file name.");
             }
         }
     }
@@ -147,7 +149,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             List<ModAdapter> adapters = adapterLoader == null ? List.of() : adapterLoader.adapters();
             sender.sendMessage(ChatColor.GREEN + "Adapter providers: " + adapters.size());
             for (ModAdapter adapter : adapters) {
-                sender.sendMessage(ChatColor.GRAY + adapter.getName() + " — " + String.join(", ", adapter.supportedMods()));
+                sender.sendMessage(ChatColor.GRAY + adapter.getName() + " — files: "
+                        + String.join(", ", adapter.supportedModFiles()));
             }
             return true;
         }
