@@ -41,7 +41,7 @@ public final class ResourcePackService {
                         .filter(path -> !Files.isSymbolicLink(path))
                         .sorted(Comparator.comparing(path -> directory.relativize(path).toString()))
                         .toList()) {
-                    String name = directory.relativize(file).toString().replace('\\\\', '/');
+                    String name = directory.relativize(file).toString().replace(java.io.File.separatorChar, '/');
                     if (name.isBlank() || name.startsWith("/") || name.contains("../")) continue;
                     zip.putNextEntry(new ZipEntry(name));
                     try (InputStream input = Files.newInputStream(file)) {
