@@ -300,8 +300,11 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
                 try {
                     sender.sendMessage(ChatColor.GRAY + adapterDisplayName(adapter) + " — files: "
                             + String.join(", ", adapter.supportedModFiles()));
-                } catch (RuntimeException | LinkageError error) {
+                } catch (Throwable error) {
+                    rethrowFatal(error);
                     sender.sendMessage(ChatColor.RED + adapter.getClass().getName() + " — invalid adapter metadata");
+                    getLogger().log(Level.WARNING,
+                            "Could not display adapter metadata for " + adapter.getClass().getName(), error);
                 }
             }
             return true;
