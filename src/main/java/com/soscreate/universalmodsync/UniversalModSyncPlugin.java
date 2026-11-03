@@ -130,24 +130,40 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
     private void activateAdapters(List<ModAdapter> adapters) {
         Set<String> implementedFiles = new HashSet<>();
         for (ModAdapter adapter : adapters) {
-            Set<String> declared;
+            Set<String> declared = new HashSet<>();
             try {
-                declared = adapter.supportedModFiles();
-                if (declared == null || declared.isEmpty()) {
+                Set<?> supplied = adapter.supportedModFiles();
+                if (supplied != null) {
+                    for (Object item : supplied) {
+                        if (item instanceof String fileName && ModAdapter.targetsFile(Set.of(fileName), fileName)) {
+                            declared.add(fileName.trim());
+                        }
+                    }
+                }
+                if (declared.isEmpty()) {
                     getLogger().warning("Adapter " + adapter.getClass().getName()
-                            + " declares no target archive file names.");
+                            + " declares no valid exact .jar or .zip target filenames.");
                     continue;
                 }
-            } catch (RuntimeException | LinkageError error) {
+            } catch (Throwable error) {
+                rethrowFatal(error);
                 getLogger().log(Level.WARNING,
                         "Could not read target filenames from adapter " + adapter.getClass().getName(), error);
                 continue;
             }
 
-            List<ModDescriptor> matching = detectedMods.stream()
-                    .filter(mod -> !implementedFiles.contains(mod.fileName().toLowerCase(Locale.ROOT)))
-                    .filter(mod -> ModAdapter.targetsFile(declared, mod.fileName()))
-                    .toList();
+            List<ModDescriptor> matching;
+            try {
+                matching = detectedMods.stream()
+                        .filter(mod -> !implementedFiles.contains(mod.fileName().toLowerCase(Locale.ROOT)))
+                        .filter(mod -> ModAdapter.targetsFile(declared, mod.fileName()))
+                        .toList();
+            } catch (Throwable error) {
+                rethrowFatal(error);
+                getLogger().log(Level.WARNING,
+                        "Adapter target matching failed for " + adapter.getClass().getName(), error);
+                continue;
+            }
             if (matching.isEmpty()) continue;
 
             try {
@@ -156,7 +172,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
                 matching.forEach(mod -> implementedFiles.add(mod.fileName().toLowerCase(Locale.ROOT)));
                 getLogger().info("Activated adapter '" + adapterDisplayName(adapter) + "' for "
                         + matching.stream().map(ModDescriptor::fileName).distinct().toList() + ".");
-            } catch (Exception | LinkageError error) {
+            } catch (Throwable error) {
+                rethrowFatal(error);
                 getLogger().log(Level.SEVERE,
                         "Adapter activation failed for " + matching.stream().map(ModDescriptor::fileName).distinct().toList()
                                 + "; server startup will continue.",
@@ -183,15 +200,22 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         try {
             String name = adapter.getName();
             return name == null || name.isBlank() ? adapter.getClass().getName() : name;
-        } catch (RuntimeException | LinkageError error) {
+        } catch (Throwable error) {
+            rethrowFatal(error);
             return adapter.getClass().getName();
         }
+    }
+
+    private static void rethrowFatal(Throwable error) {
+        if (error instanceof VirtualMachineError fatal) throw fatal;
+        if (error instanceof ThreadDeath fatal) throw fatal;
     }
 
     private void safelyDisableAdapter(ModAdapter adapter) {
         try {
             adapter.onDisable();
-        } catch (RuntimeException | LinkageError error) {
+        } catch (Throwable error) {
+            rethrowFatal(error);
             getLogger().log(Level.WARNING, "Adapter cleanup failed: " + adapter.getClass().getName(), error);
         }
     }
