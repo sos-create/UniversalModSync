@@ -44,7 +44,7 @@ public interface ModAdapter {
         for (String configured : supportedFiles) {
             if (configured == null) continue;
             String candidate = configured.trim();
-            if (candidate.isEmpty() || candidate.contains("/") || candidate.contains("\\\\")) continue;
+            if (candidate.isEmpty() || candidate.contains("/") || candidate.indexOf(92) >= 0) continue;
             if (candidate.equalsIgnoreCase(detected)) return true;
         }
         return false;
