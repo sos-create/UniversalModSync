@@ -169,9 +169,38 @@ public final class ModCompatibilityService {
     }
 
     private static String unescapeTomlBasicString(String value) {
-        return value.replace("\\\\t", "\\t").replace("\\\\n", "\\n")
-                .replace("\\\\r", "\\r").replace("\\\\\\\", "\\\\")
-                .replace("\\\\\"", "\"");
+        StringBuilder result = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (current != '\\\\' || index + 1 >= value.length()) {
+                result.append(current);
+                continue;
+            }
+            char escaped = value.charAt(++index);
+            switch (escaped) {
+                case 'b' -> result.append('\\b');
+                case 't' -> result.append('\\t');
+                case 'n' -> result.append('\\n');
+                case 'f' -> result.append('\\f');
+                case 'r' -> result.append('\\r');
+                case '"' -> result.append('"');
+                case '\\\\' -> result.append('\\\\');
+                case 'u' -> {
+                    if (index + 4 < value.length()) {
+                        try {
+                            result.append((char) Integer.parseInt(value.substring(index + 1, index + 5), 16));
+                            index += 4;
+                        } catch (NumberFormatException exception) {
+                            result.append('u');
+                        }
+                    } else {
+                        result.append('u');
+                    }
+                }
+                default -> result.append(escaped);
+            }
+        }
+        return result.toString();
     }
 
     private static List<String> forgeDependencies(String toml, String modId) {
