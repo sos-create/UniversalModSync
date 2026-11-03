@@ -32,6 +32,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             resourcePacks = new ResourcePackService(getDataFolder().toPath());
             ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
             getServer().getPluginManager().registerEvents(new ResourcePackListener(resourcePacks,
+                    getConfig().getBoolean("resource-pack.enabled", true),
                     getConfig().getString("resource-pack.public-url", ""),
                     getConfig().getString("resource-pack.prompt", ""),
                     getConfig().getBoolean("resource-pack.required", false), getLogger()), this);
