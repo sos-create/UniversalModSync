@@ -50,7 +50,7 @@ public final class ResourcePackService {
                     zip.closeEntry();
                 }
             }
-        } catch (Exception exception) {
+        } catch (IOException exception) {
             Files.deleteIfExists(temporary);
             throw exception;
         }
