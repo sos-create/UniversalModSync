@@ -55,8 +55,9 @@ public final class ModAdapterLoader implements AutoCloseable {
                             (Path path) -> path.getFileName().toString().toLowerCase(Locale.ROOT))
                             .thenComparing(path -> path.getFileName().toString()))
                     .forEach(this::loadOne);
-        } catch (IOException | RuntimeException exception) {
-            plugin.getLogger().log(Level.WARNING, "Could not scan adapter directory " + directory, exception);
+        } catch (Throwable error) {
+            rethrowFatal(error);
+            plugin.getLogger().log(Level.WARNING, "Could not scan adapter directory " + directory, error);
         }
         return adapters();
     }
@@ -81,7 +82,8 @@ public final class ModAdapterLoader implements AutoCloseable {
                     if (!providers.hasNext()) break;
                     provider = providers.next();
                     consecutiveDiscoveryErrors = 0;
-                } catch (ServiceConfigurationError | LinkageError | RuntimeException error) {
+                } catch (Throwable error) {
+                    rethrowFatal(error);
                     plugin.getLogger().log(Level.WARNING,
                             "Could not read an adapter provider declaration in " + jar.getFileName(), error);
                     if (++consecutiveDiscoveryErrors >= 8) break;
@@ -98,7 +100,8 @@ public final class ModAdapterLoader implements AutoCloseable {
                     retained = true;
                     plugin.getLogger().info("Loaded adapter provider '" + safeName(adapter)
                             + "' from " + jar.getFileName());
-                } catch (ServiceConfigurationError | LinkageError | RuntimeException error) {
+                } catch (Throwable error) {
+                    rethrowFatal(error);
                     plugin.getLogger().log(Level.WARNING,
                             "An adapter provider could not be constructed from " + jar.getFileName()
                                     + "; other providers will still be considered.", error);
@@ -107,7 +110,8 @@ public final class ModAdapterLoader implements AutoCloseable {
 
             if (retained) classLoaders.add(classLoader);
             else plugin.getLogger().warning("No usable ModAdapter providers found in " + jar.getFileName());
-        } catch (IOException | RuntimeException | LinkageError | ServiceConfigurationError error) {
+        } catch (Throwable error) {
+            rethrowFatal(error);
             plugin.getLogger().log(Level.WARNING,
                     "Adapter JAR could not be loaded: " + jar.getFileName(), error);
         } finally {
@@ -125,9 +129,15 @@ public final class ModAdapterLoader implements AutoCloseable {
         try {
             String name = adapter.getName();
             return name == null || name.isBlank() ? adapter.getClass().getName() : name;
-        } catch (RuntimeException | LinkageError exception) {
+        } catch (Throwable error) {
+            rethrowFatal(error);
             return adapter.getClass().getName();
         }
+    }
+
+    private static void rethrowFatal(Throwable error) {
+        if (error instanceof VirtualMachineError fatal) throw fatal;
+        if (error instanceof ThreadDeath fatal) throw fatal;
     }
 
     public synchronized List<ModAdapter> adapters() {
