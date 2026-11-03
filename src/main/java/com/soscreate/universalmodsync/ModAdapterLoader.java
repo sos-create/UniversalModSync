@@ -25,6 +25,7 @@ public final class ModAdapterLoader implements AutoCloseable {
     private final List<LoadedAdapter> loaded = new ArrayList<>();
     private final List<URLClassLoader> classLoaders = new ArrayList<>();
     private boolean closed;
+    private boolean loadedOnce;
 
     public ModAdapterLoader(JavaPlugin plugin) throws IOException {
         this(plugin, plugin.getDataFolder().toPath().resolve("adapters"));
@@ -44,7 +45,8 @@ public final class ModAdapterLoader implements AutoCloseable {
     /** Loads valid adapter providers. One broken provider does not block other JARs. */
     public synchronized List<ModAdapter> load() {
         if (closed) throw new IllegalStateException("Adapter loader is already closed");
-        closeLoadedClassLoaders();
+        if (loadedOnce) return adapters();
+        loadedOnce = true;
         try (var files = Files.list(directory)) {
             files.filter(path -> !Files.isSymbolicLink(path))
                     .filter(Files::isRegularFile)
