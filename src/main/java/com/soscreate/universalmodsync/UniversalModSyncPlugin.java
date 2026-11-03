@@ -10,10 +10,14 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 public final class UniversalModSyncPlugin extends JavaPlugin {
     private ModPackService modPackService;
     private ModSyncHttpServer httpServer;
+    private ScheduledExecutorService scanner;
 
     @Override
     public void onEnable() {
@@ -21,16 +25,37 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         Path modsDirectory = getDataFolder().toPath().resolve("mods");
         try {
             Files.createDirectories(modsDirectory);
-            modPackService = new ModPackService(modsDirectory);
-            modPackService.refresh();
+            modPackService = new ModPackService(modsDirectory, getLogger());
+            ModPackService.RefreshResult initial = modPackService.refresh();
             startHttpServer();
+            startFolderScanner();
+            getLogger().info("UniversalModSync enabled. Published Forge JARs: " + initial.modCount());
+            getLogger().info("Place client Forge mods in: " + modsDirectory);
         } catch (Exception exception) {
             getLogger().severe("UniversalModSync could not start: " + exception.getMessage());
             getServer().getPluginManager().disablePlugin(this);
-            return;
         }
-        getLogger().info("UniversalModSync enabled. Mod files: " + modPackService.getEntries().size());
-        getLogger().info("Put client-side Forge mod JARs in: " + modsDirectory);
+    }
+
+    private void startFolderScanner() {
+        int interval = Math.max(5, getConfig().getInt("mods.scan-interval-seconds", 10));
+        ThreadFactory factory = task -> {
+            Thread thread = new Thread(task, "UniversalModSync-Scanner");
+            thread.setDaemon(true);
+            return thread;
+        };
+        scanner = Executors.newSingleThreadScheduledExecutor(factory);
+        scanner.scheduleWithFixedDelay(() -> {
+            try {
+                ModPackService.RefreshResult result = modPackService.refresh();
+                if (result.changed()) {
+                    getLogger().info("Mod folder changed. Published " + result.modCount()
+                            + " Forge mod(s); manifest revision " + result.revision());
+                }
+            } catch (Exception exception) {
+                getLogger().warning("Could not refresh mod folder: " + exception.getMessage());
+            }
+        }, interval, interval, TimeUnit.SECONDS);
     }
 
     private void startHttpServer() throws IOException {
@@ -53,15 +78,17 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             sender.sendMessage(ChatColor.GREEN + "UniversalModSync is running.");
-            sender.sendMessage(ChatColor.GRAY + "Published JAR files: " + modPackService.getEntries().size());
+            sender.sendMessage(ChatColor.GRAY + "Published Forge JARs: " + modPackService.getEntries().size());
             sender.sendMessage(ChatColor.GRAY + "Mods folder: " + getDataFolder().toPath().resolve("mods"));
+            sender.sendMessage(ChatColor.GRAY + "Manifest revision: " + modPackService.getRevision());
             sender.sendMessage(ChatColor.GRAY + "HTTP: " + (httpServer == null ? "disabled" : "enabled"));
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             try {
-                modPackService.refresh();
-                sender.sendMessage(ChatColor.GREEN + "Mod manifest refreshed. Files: " + modPackService.getEntries().size());
+                ModPackService.RefreshResult result = modPackService.refresh();
+                sender.sendMessage(ChatColor.GREEN + "Manifest refreshed. Forge JARs: " + result.modCount()
+                        + ", revision: " + result.revision());
             } catch (IOException exception) {
                 sender.sendMessage(ChatColor.RED + "Refresh failed: " + exception.getMessage());
             }
@@ -73,6 +100,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (scanner != null) scanner.shutdownNow();
         if (httpServer != null) httpServer.stop();
     }
 }
