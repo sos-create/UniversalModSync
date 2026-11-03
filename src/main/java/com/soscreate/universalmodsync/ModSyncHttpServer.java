@@ -16,15 +16,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class ModSyncHttpServer implements AutoCloseable {
     private final HttpServer server;
     private final ResourcePackService resourcePacks;
+    private final InetSocketAddress bindAddress;
     private final ExecutorService executor;
     private final AtomicBoolean stopped = new AtomicBoolean(false);
     private boolean started;
+    private boolean bound;
 
     public ModSyncHttpServer(InetSocketAddress address, ResourcePackService resourcePacks) throws IOException {
         if (address == null) throw new IllegalArgumentException("HTTP bind address cannot be null");
         if (resourcePacks == null) throw new IllegalArgumentException("Resource-pack service cannot be null");
 
-        HttpServer created = HttpServer.create(address, 16);
+        HttpServer created = HttpServer.create();
         AtomicInteger threadNumber = new AtomicInteger();
         ExecutorService workers = Executors.newFixedThreadPool(2, runnable -> {
             Thread thread = new Thread(runnable,
@@ -39,22 +41,26 @@ public final class ModSyncHttpServer implements AutoCloseable {
             created.setExecutor(workers);
         } catch (RuntimeException | LinkageError error) {
             workers.shutdownNow();
-            created.stop(0);
             throw error;
         }
 
         this.server = created;
         this.executor = workers;
         this.resourcePacks = resourcePacks;
+        this.bindAddress = address;
     }
 
-    public synchronized void start() {
+    public synchronized void start() throws IOException {
         if (stopped.get()) throw new IllegalStateException("HTTP service is already stopped");
         if (started) return;
         try {
+            if (!bound) {
+                server.bind(bindAddress, 16);
+                bound = true;
+            }
             server.start();
             started = true;
-        } catch (RuntimeException | LinkageError error) {
+        } catch (IOException | RuntimeException | LinkageError error) {
             stop();
             throw error;
         }
@@ -72,10 +78,9 @@ public final class ModSyncHttpServer implements AutoCloseable {
     public synchronized void stop() {
         if (!stopped.compareAndSet(false, true)) return;
         try {
-            // HttpServer may already have bound its socket before start() is called.
-            server.stop(0);
+            if (bound) server.stop(0);
         } catch (IllegalStateException ignored) {
-            // A server that never started has no active exchange to drain.
+            // The server may have been bound but not started if startup failed.
         } finally {
             executor.shutdownNow();
             started = false;
