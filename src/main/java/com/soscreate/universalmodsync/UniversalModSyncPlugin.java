@@ -18,6 +18,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
     private ModPackService modPackService;
     private ModSyncHttpServer httpServer;
     private ResourcePackService resourcePacks;
+    private AdventureContentService adventureContent;
     private ScheduledExecutorService scanner;
 
     @Override
@@ -30,6 +31,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
                     getConfig().getBoolean("mods.include-unrecognized-jars", false));
             ModPackService.RefreshResult initial = modPackService.refresh();
             resourcePacks = new ResourcePackService(getDataFolder().toPath());
+            adventureContent = new AdventureContentService(this);
+            getServer().getPluginManager().registerEvents(adventureContent, this);
             ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
             getServer().getPluginManager().registerEvents(new ResourcePackListener(resourcePacks,
                     getConfig().getBoolean("resource-pack.enabled", true),
@@ -95,6 +98,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             sender.sendMessage(ChatColor.RED + "You do not have permission.");
             return true;
         }
+        if (adventureContent != null && adventureContent.handleCommand(sender, args)) return true;
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             sender.sendMessage(ChatColor.GREEN + "UniversalModSync client pack is running.");
             sender.sendMessage(ChatColor.GRAY + "Client mods: " + modPackService.getEntries().size());
@@ -115,7 +119,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             }
             return true;
         }
-        sender.sendMessage(ChatColor.YELLOW + "Usage: /modsync <status|reload>");
+        sender.sendMessage(ChatColor.YELLOW + "Usage: /modsync <status|reload|dungeon|boss|give <player> <ember_blade|healing_orb|dungeon_key>>");
         return true;
     }
 
