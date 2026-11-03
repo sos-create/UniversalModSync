@@ -23,7 +23,7 @@ public final class ResourcePackListener implements Listener {
         this.enabled = enabled;
         this.publicUrl = publicUrl == null ? "" : publicUrl.trim();
         this.prompt = prompt == null || prompt.isBlank()
-                ? "This server uses custom items, creatures and dungeon visuals."
+                ? "This server provides custom assets through a server resource pack."
                 : prompt;
         this.required = required;
         this.logger = logger;
