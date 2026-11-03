@@ -19,10 +19,11 @@ public final class ModSyncHttpServer {
     private final String packName;
     private final String minecraftVersion;
     private final String forgeVersion;
+    private final ResourcePackService resourcePacks;
 
     public ModSyncHttpServer(InetSocketAddress address, ModPackService service, Logger logger,
                              String pluginVersion, String packName, String minecraftVersion,
-                             String forgeVersion) throws IOException {
+                             String forgeVersion, ResourcePackService resourcePacks) throws IOException {
         this.server = HttpServer.create(address, 0);
         this.modPackService = service;
         this.logger = logger;
@@ -30,9 +31,11 @@ public final class ModSyncHttpServer {
         this.packName = packName;
         this.minecraftVersion = minecraftVersion;
         this.forgeVersion = forgeVersion;
+        this.resourcePacks = resourcePacks;
         server.createContext("/v1/health", this::handleHealth);
         server.createContext("/v1/manifest", this::handleManifest);
         server.createContext("/v1/mods/", this::handleMod);
+        server.createContext("/v1/resource-pack.zip", this::handleResourcePack);
         server.setExecutor(ExecutorsHolder.EXECUTOR);
     }
 
@@ -94,6 +97,18 @@ public final class ModSyncHttpServer {
         exchange.getResponseHeaders().set("ETag", "\"" + modPackService.getRevision() + "\"");
         exchange.sendResponseHeaders(200, body.length);
         try (var output = exchange.getResponseBody()) { output.write(body); }
+    }
+
+    private void handleResourcePack(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { respond(exchange, 405, "Method not allowed"); return; }
+        ResourcePackService.PackInfo pack = resourcePacks.getInfo();
+        if (pack == null) { respond(exchange, 404, "Resource pack not built"); return; }
+        exchange.getResponseHeaders().set("Content-Type", "application/zip");
+        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"UniversalModSync-resource-pack.zip\"");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+        exchange.sendResponseHeaders(200, pack.size());
+        try (var output = exchange.getResponseBody(); var input = Files.newInputStream(pack.path())) { input.transferTo(output); }
     }
 
     private void handleMod(HttpExchange exchange) throws IOException {
