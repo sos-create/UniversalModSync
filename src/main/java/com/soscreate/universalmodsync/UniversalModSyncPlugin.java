@@ -41,14 +41,14 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
                     getConfig().getBoolean("resource-pack.required", false), getLogger()), this);
             startHttpServer();
             startFolderScanner();
-            getLogger().info("UniversalModSync enabled for CLIENT-SINGLEPLAYER Forge modpacks.");
-            getLogger().info("Published client mods: " + initial.modCount());
+            getLogger().info("UniversalModSync enabled: Paper server-side adventure content.");
+            getLogger().info("Legacy client mod manifest entries: " + initial.modCount() + " (not installed on players).");
             getLogger().info("Server resource pack built: " + packInfo.size() + " bytes (SHA-1 " + packInfo.sha1() + ").");
             getLogger().info("Resource pack files: " + resourcePacks.getDirectory());
             if (getConfig().getString("resource-pack.public-url", "").isBlank()) {
                 getLogger().warning("Set resource-pack.public-url to a publicly reachable URL ending in /v1/resource-pack.zip to send the pack to players.");
             }
-            getLogger().info("Place client Forge JARs in: " + modsDirectory);
+            getLogger().info("Players do not need Forge or client-side mods.");
             getLogger().info("Paper distributes these files; it does not execute Forge mods.");
         } catch (Exception exception) {
             getLogger().severe("UniversalModSync could not start: " + exception.getMessage());
@@ -100,8 +100,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         }
         if (adventureContent != null && adventureContent.handleCommand(sender, args)) return true;
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
-            sender.sendMessage(ChatColor.GREEN + "UniversalModSync client pack is running.");
-            sender.sendMessage(ChatColor.GRAY + "Client mods: " + modPackService.getEntries().size());
+            sender.sendMessage(ChatColor.GREEN + "UniversalModSync server adventure system is running.");
+            sender.sendMessage(ChatColor.GRAY + "Server-side content: items, dungeon and boss.");
             sender.sendMessage(ChatColor.GRAY + "Mods folder: " + getDataFolder().toPath().resolve("mods"));
             sender.sendMessage(ChatColor.GRAY + "Manifest revision: " + modPackService.getRevision());
             sender.sendMessage(ChatColor.GRAY + "HTTP: " + (httpServer == null ? "disabled" : "enabled"));
@@ -112,7 +112,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             try {
                 ModPackService.RefreshResult result = modPackService.refresh();
                 ResourcePackService.PackInfo pack = resourcePacks.rebuild();
-                sender.sendMessage(ChatColor.GREEN + "Pack refreshed. Legacy Forge files: " + result.modCount()
+                sender.sendMessage(ChatColor.GREEN + "Server resource pack rebuilt. Legacy manifest entries: " + result.modCount()
                         + ", resource pack: " + pack.size() + " bytes, SHA-1: " + pack.sha1());
             } catch (IOException exception) {
                 sender.sendMessage(ChatColor.RED + "Refresh failed: " + exception.getMessage());
