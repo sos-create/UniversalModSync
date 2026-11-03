@@ -241,9 +241,9 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             InetSocketAddress socketAddress = new InetSocketAddress(address.trim(), port);
             InetAddress resolved = socketAddress.getAddress();
             boolean publicBindAllowed = getConfig().getBoolean("http.allow-public-bind", false);
-            if (resolved != null && resolved.isAnyLocalAddress() && !publicBindAllowed) {
-                getLogger().warning("HTTP service was not bound to all network interfaces. "
-                        + "Set http.allow-public-bind: true only when public access is intentional and protected by a firewall.");
+            if ((resolved == null || !resolved.isLoopbackAddress()) && !publicBindAllowed) {
+                getLogger().warning("HTTP service was not bound to a non-loopback address. "
+                        + "Set http.allow-public-bind: true only when external access is intentional and protected by a firewall.");
                 return;
             }
 
