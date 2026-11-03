@@ -82,7 +82,7 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
                 getLogger(), getDescription().getVersion(),
                 getConfig().getString("pack.name", "UniversalModSync Client Pack"),
                 getConfig().getString("pack.minecraft-version", "unspecified"),
-                getConfig().getString("pack.forge-version", "unspecified"));
+                getConfig().getString("pack.forge-version", "unspecified"), resourcePacks);
         httpServer.start();
         getLogger().info("ModSync HTTP endpoint listening on " + address + ":" + port);
     }
