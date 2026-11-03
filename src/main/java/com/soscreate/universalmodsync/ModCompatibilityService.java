@@ -3,77 +3,123 @@ package com.soscreate.universalmodsync;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Discovers mod archives and reports whether a Paper-side adapter is available.
- * It deliberately does not attempt to load Forge/Fabric bytecode inside Paper.
+ * Inspects Forge/Fabric metadata. It never defines or executes classes from mod JARs.
  */
 public final class ModCompatibilityService {
-    private static final Pattern MOD_ID = Pattern.compile("(?m)^\\s*modId\\s*=\\s*[\"']?([a-zA-Z0-9_.-]+)");
-    private static final Pattern VERSION = Pattern.compile("(?m)^\\s*version\\s*=\\s*[\"']?([^\"'\\r\\n]+)");
+    private static final Pattern TOML_MOD_BLOCK = Pattern.compile("(?ms)^\\s*\\[\\[mods]](.*?)(?=^\\s*\\[\\[|\\z)");
+    private static final Pattern TOML_ID = Pattern.compile("(?m)^\\s*modId\\s*=\\s*[\"']([^'\"\\r\\n]+)[\"']");
+    private static final Pattern TOML_VERSION = Pattern.compile("(?m)^\\s*version\\s*=\\s*[\"']([^'\"\\r\\n]+)[\"']");
+    private static final Pattern FABRIC_ID = Pattern.compile("\"id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern FABRIC_VERSION = Pattern.compile("\"version\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern FABRIC_ENV = Pattern.compile("\"environment\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern DEPENDENCY_KEY = Pattern.compile("\"([^\"]+)\"\\s*:");
     private final Path modsDirectory;
-    private List<ModReport> lastReports = List.of();
+    private List<ModDescriptor> lastMods = List.of();
 
     public ModCompatibilityService(JavaPlugin plugin) throws IOException {
         modsDirectory = plugin.getDataFolder().toPath().resolve("mods").toAbsolutePath().normalize();
         Files.createDirectories(modsDirectory);
     }
 
-    public List<ModReport> scan() {
-        List<ModReport> reports = new ArrayList<>();
+    public List<ModDescriptor> scan() throws IOException {
+        List<ModDescriptor> result = new ArrayList<>();
         try (var files = Files.list(modsDirectory)) {
-            files.filter(Files::isRegularFile)
+            for (Path file : files.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
                     .sorted(Comparator.comparing(path -> path.getFileName().toString().toLowerCase(Locale.ROOT)))
-                    .forEach(path -> reports.add(inspect(path)));
-        } catch (IOException ignored) {
-            // The directory is created during initialization.
+                    .toList()) {
+                result.addAll(inspect(file));
+            }
         }
-        lastReports = List.copyOf(reports);
-        return lastReports;
+        lastMods = List.copyOf(result);
+        return lastMods;
     }
 
-    private ModReport inspect(Path path) {
-        String fileName = path.getFileName().toString();
-        try (JarFile jar = new JarFile(path.toFile())) {
-            var forgeMetadata = jar.getJarEntry("META-INF/mods.toml");
-            if (forgeMetadata != null) {
-                String metadata;
-                try (var input = jar.getInputStream(forgeMetadata)) {
-                    metadata = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+    private List<ModDescriptor> inspect(Path file) {
+        String name = file.getFileName().toString();
+        try (JarFile jar = new JarFile(file.toFile())) {
+            var forge = jar.getJarEntry("META-INF/mods.toml");
+            if (forge != null) {
+                String toml;
+                try (var in = jar.getInputStream(forge)) { toml = new String(in.readAllBytes(), StandardCharsets.UTF_8); }
+                List<ModDescriptor> found = new ArrayList<>();
+                Matcher blocks = TOML_MOD_BLOCK.matcher(toml);
+                while (blocks.find()) {
+                    String block = blocks.group(1);
+                    String id = first(TOML_ID, block, stripJar(name));
+                    String version = first(TOML_VERSION, block, "unknown");
+                    found.add(new ModDescriptor(name, "Forge", id, version,
+                            forgeDependencies(toml, id), "unknown", "ADAPTER_REQUIRED"));
                 }
-                Matcher id = MOD_ID.matcher(metadata);
-                Matcher version = VERSION.matcher(metadata);
-                String modId = id.find() ? id.group(1) : stripJar(fileName);
-                String modVersion = version.find() ? version.group(1).trim() : "unknown";
-                return new ModReport(fileName, modId, modVersion, "FORGE_METADATA_FOUND_ADAPTER_REQUIRED");
+                if (!found.isEmpty()) return found;
+                return List.of(new ModDescriptor(name, "Forge", stripJar(name), "unknown",
+                        List.of(), "unknown", "METADATA_INCOMPLETE"));
             }
-            if (jar.getJarEntry("fabric.mod.json") != null) {
-                return new ModReport(fileName, stripJar(fileName), "unknown", "FABRIC_METADATA_FOUND_ADAPTER_REQUIRED");
+            var fabric = jar.getJarEntry("fabric.mod.json");
+            if (fabric != null) {
+                String json;
+                try (var in = jar.getInputStream(fabric)) { json = new String(in.readAllBytes(), StandardCharsets.UTF_8); }
+                String id = first(FABRIC_ID, json, stripJar(name));
+                String version = first(FABRIC_VERSION, json, "unknown");
+                String environment = first(FABRIC_ENV, json, "*");
+                List<String> dependencies = fabricDependencies(json);
+                String compatibility = environment.equalsIgnoreCase("client")
+                        ? "CLIENT_ONLY_NOT_RUNNABLE_ON_PAPER" : "ADAPTER_REQUIRED";
+                return List.of(new ModDescriptor(name, "Fabric", id, version, dependencies, environment, compatibility));
             }
-            return new ModReport(fileName, stripJar(fileName), "unknown", "UNRECOGNIZED_JAR");
-        } catch (IOException exception) {
-            return new ModReport(fileName, stripJar(fileName), "unknown", "INVALID_OR_UNREADABLE_JAR");
+            return List.of(new ModDescriptor(name, "Unknown", stripJar(name), "unknown",
+                    List.of(), "unknown", "UNRECOGNIZED_JAR"));
+        } catch (Exception exception) {
+            return List.of(new ModDescriptor(name, "Unknown", stripJar(name), "unknown",
+                    List.of(), "unknown", "INVALID_OR_UNREADABLE_JAR"));
         }
     }
 
-    private static String stripJar(String fileName) {
-        return fileName.toLowerCase(Locale.ROOT).endsWith(".jar")
-                ? fileName.substring(0, fileName.length() - 4) : fileName;
+    private static List<String> forgeDependencies(String toml, String modId) {
+        Pattern section = Pattern.compile("(?ms)^\\s*\\[\\[dependencies\\." + Pattern.quote(modId)
+                + "]](.*?)(?=^\\s*\\[\\[|\\z)");
+        Matcher matcher = section.matcher(toml);
+        Set<String> dependencies = new LinkedHashSet<>();
+        while (matcher.find()) {
+            Matcher id = TOML_ID.matcher(matcher.group(1));
+            if (id.find()) dependencies.add(id.group(1));
+        }
+        return List.copyOf(dependencies);
     }
 
-    public List<ModReport> getLastReports() { return lastReports; }
-    public int getAdapterCount() { return 0; }
-    public Path getModsDirectory() { return modsDirectory; }
+    private static List<String> fabricDependencies(String json) {
+        Pattern section = Pattern.compile("(?s)\"depends\"\\s*:\\s*\\{(.*?)\\}");
+        Matcher sectionMatcher = section.matcher(json);
+        if (!sectionMatcher.find()) return List.of();
+        Matcher keys = DEPENDENCY_KEY.matcher(sectionMatcher.group(1));
+        List<String> result = new ArrayList<>();
+        while (keys.find()) result.add(keys.group(1));
+        return List.copyOf(result);
+    }
 
-    public record ModReport(String fileName, String modId, String version, String status) { }
+    private static String first(Pattern pattern, String text, String fallback) {
+        Matcher matcher = pattern.matcher(text);
+        return matcher.find() ? matcher.group(1).trim() : fallback;
+    }
+
+    private static String stripJar(String name) {
+        return name.toLowerCase(Locale.ROOT).endsWith(".jar") ? name.substring(0, name.length() - 4) : name;
+    }
+
+    public List<ModDescriptor> getLastMods() { return lastMods; }
+    public Path getModsDirectory() { return modsDirectory; }
 }
