@@ -40,9 +40,24 @@ public final class ResourcePackService {
                 {\n  \"parent\": \"minecraft:item/generated\",\n  \"textures\": {\"layer0\": \"minecraft:item/amethyst_shard\"},\n  \"overrides\": [{\"predicate\": {\"custom_model_data\": 1002}, \"model\": \"universalmodsync:item/healing_orb\"}]\n}\n                """);
         writeIfMissing("assets/minecraft/models/item/tripwire_hook.json", """
                 {\n  \"parent\": \"minecraft:item/generated\",\n  \"textures\": {\"layer0\": \"minecraft:item/tripwire_hook\"},\n  \"overrides\": [{\"predicate\": {\"custom_model_data\": 1003}, \"model\": \"universalmodsync:item/dungeon_key\"}]\n}\n                """);
-        writeIfMissing("assets/universalmodsync/models/item/ember_blade.json", "{\\n  \\\"parent\\\": \\\"minecraft:item/handheld\\\", \\\"textures\\\": {\\\"layer0\\\": \\\"universalmodsync:item/ember_blade\\\"}\\n}\\n");
-        writeIfMissing("assets/universalmodsync/models/item/healing_orb.json", "{\\n  \\\"parent\\\": \\\"minecraft:item/generated\\\", \\\"textures\\\": {\\\"layer0\\\": \\\"universalmodsync:item/healing_orb\\\"}\\n}\\n");
-        writeIfMissing("assets/universalmodsync/models/item/dungeon_key.json", "{\\n  \\\"parent\\\": \\\"minecraft:item/generated\\\", \\\"textures\\\": {\\\"layer0\\\": \\\"universalmodsync:item/dungeon_key\\\"}\\n}\\n");
+        writeIfMissing("assets/universalmodsync/models/item/ember_blade.json", """
+                {
+                  "parent": "minecraft:item/handheld",
+                  "textures": {"layer0": "universalmodsync:item/ember_blade"}
+                }
+                """);
+        writeIfMissing("assets/universalmodsync/models/item/healing_orb.json", """
+                {
+                  "parent": "minecraft:item/generated",
+                  "textures": {"layer0": "universalmodsync:item/healing_orb"}
+                }
+                """);
+        writeIfMissing("assets/universalmodsync/models/item/dungeon_key.json", """
+                {
+                  "parent": "minecraft:item/generated",
+                  "textures": {"layer0": "universalmodsync:item/dungeon_key"}
+                }
+                """);
         createTexture("assets/universalmodsync/textures/item/ember_blade.png", 0xFF3210, 0xFFFF45, 0xA9A9A9, 1);
         createTexture("assets/universalmodsync/textures/item/healing_orb.png", 0x9C39FF, 0xF4C9FF, 0xFFFFFF, 2);
         createTexture("assets/universalmodsync/textures/item/dungeon_key.png", 0xA66B22, 0xFFE078, 0x5B3514, 3);
