@@ -7,7 +7,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -24,10 +24,12 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         try {
-            resourcePacks = new ResourcePackService(getDataFolder().toPath());
+            Path dataFolder = getDataFolder().toPath().toAbsolutePath().normalize();
+            resourcePacks = new ResourcePackService(dataFolder);
             ResourcePackService.PackInfo packInfo = resourcePacks.rebuild();
-            compatibility = new ModCompatibilityService(this);
-            adapterLoader = new ModAdapterLoader(this);
+
+            compatibility = new ModCompatibilityService(this, configuredDirectory("mods.directory", "mods"));
+            adapterLoader = new ModAdapterLoader(this, configuredDirectory("adapters.directory", "adapters"));
             detectedMods = compatibility.scan();
             activateAdapters(adapterLoader.load());
 
@@ -42,48 +44,75 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             startHttpServer();
             getLogger().info("UniversalModSync started: " + detectedMods.size() + " mod descriptor(s), "
                     + adapterLoader.adapters().size() + " adapter provider(s).");
-            getLogger().info("Mod JARs are inspected, never executed by Paper. Only trusted Paper adapters implement behavior.");
-            getLogger().info("Resource pack: " + packInfo.size() + " bytes; SHA-1 " + packInfo.sha1());
+            getLogger().info("Original Forge/Fabric JARs are metadata-only; Paper adapters provide server-side behavior.");
+            getLogger().info("Resource pack archive: " + packInfo.size() + " bytes; SHA-1 " + packInfo.sha1());
         } catch (Exception exception) {
             getLogger().severe("UniversalModSync could not start: " + exception.getMessage());
+            getLogger().fine("Startup failure details: " + exception);
             getServer().getPluginManager().disablePlugin(this);
         }
     }
 
+    private Path configuredDirectory(String key, String fallback) {
+        String configured = getConfig().getString(key, fallback);
+        if (configured == null || configured.isBlank()) configured = fallback;
+        Path path = Path.of(configured.trim());
+        if (!path.isAbsolute()) path = getDataFolder().toPath().resolve(path);
+        return path.toAbsolutePath().normalize();
+    }
+
     private void activateAdapters(List<ModAdapter> adapters) {
-        Set<String> known = new HashSet<>();
+        Set<String> implemented = new HashSet<>();
         for (ModAdapter adapter : adapters) {
-            Set<String> ids = new HashSet<>();
-            for (String id : adapter.supportedMods()) ids.add(id.toLowerCase(Locale.ROOT));
-            List<ModDescriptor> matching = detectedMods.stream()
-                    .filter(mod -> ids.contains(mod.modId().toLowerCase(Locale.ROOT)))
-                    .toList();
-            if (matching.isEmpty()) continue;
             try {
+                Set<String> declared = adapter.supportedMods();
+                if (declared == null || declared.isEmpty()) {
+                    getLogger().warning("Adapter '" + adapter.getName() + "' declares no supported mod IDs.");
+                    continue;
+                }
+                Set<String> ids = new HashSet<>();
+                for (String id : declared) {
+                    if (id != null && !id.isBlank()) ids.add(id.trim().toLowerCase(Locale.ROOT));
+                }
+                List<ModDescriptor> matching = detectedMods.stream()
+                        .filter(mod -> ids.contains(mod.modId().toLowerCase(Locale.ROOT)))
+                        .toList();
+                if (matching.isEmpty()) continue;
                 adapter.onEnable(this, matching);
-                matching.forEach(mod -> known.add(mod.modId().toLowerCase(Locale.ROOT)));
+                matching.forEach(mod -> implemented.add(mod.modId().toLowerCase(Locale.ROOT)));
                 getLogger().info("Adapter '" + adapter.getName() + "' activated for " + matching.size() + " mod(s).");
             } catch (Throwable error) {
-                getLogger().severe("Adapter '" + adapter.getName() + "' failed: " + error.getMessage());
+                getLogger().log(java.util.logging.Level.SEVERE,
+                        "Adapter activation failed; server startup will continue: " + adapter.getClass().getName(), error);
             }
         }
         for (ModDescriptor mod : detectedMods) {
             String id = mod.modId().toLowerCase(Locale.ROOT);
             if (mod.compatibility().equals("CLIENT_ONLY_NOT_RUNNABLE_ON_PAPER")) {
                 getLogger().warning(mod.modId() + ": client-only mod; cannot run on Paper.");
-            } else if (!known.contains(id)) {
+            } else if (!implemented.contains(id)) {
                 getLogger().warning(mod.modId() + ": detected, but no Paper adapter is installed.");
             }
         }
     }
 
-    private void startHttpServer() throws IOException {
+    private void startHttpServer() {
         if (!getConfig().getBoolean("http.enabled", true)) return;
         String address = getConfig().getString("http.bind-address", "0.0.0.0");
         int port = getConfig().getInt("http.port", 8765);
-        if (port < 1 || port > 65535) throw new IOException("Invalid HTTP port: " + port);
-        httpServer = new ModSyncHttpServer(new InetSocketAddress(address, port), resourcePacks);
-        httpServer.start();
+        if (port < 1 || port > 65535) {
+            getLogger().warning("HTTP service disabled: invalid port " + port + ".");
+            return;
+        }
+        try {
+            httpServer = new ModSyncHttpServer(new InetSocketAddress(address, port), resourcePacks);
+            httpServer.start();
+            getLogger().info("HTTP service listening on " + address + ":" + port + ".");
+        } catch (IOException | IllegalArgumentException exception) {
+            httpServer = null;
+            getLogger().warning("HTTP service could not bind and was disabled; the main plugin remains active: "
+                    + exception.getMessage());
+        }
     }
 
     @Override
@@ -96,7 +125,8 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             sender.sendMessage(ChatColor.GREEN + "UniversalModSync is running.");
             sender.sendMessage(ChatColor.GRAY + "Detected mod descriptors: " + detectedMods.size());
-            sender.sendMessage(ChatColor.GRAY + "Loaded adapter providers: " + adapterLoader.adapters().size());
+            sender.sendMessage(ChatColor.GRAY + "Loaded adapter providers: "
+                    + (adapterLoader == null ? 0 : adapterLoader.adapters().size()));
             sender.sendMessage(ChatColor.GRAY + "Resource pack HTTP: " + (httpServer == null ? "disabled" : "enabled"));
             return true;
         }
@@ -114,14 +144,15 @@ public final class UniversalModSyncPlugin extends JavaPlugin {
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("adapters")) {
-            sender.sendMessage(ChatColor.GREEN + "Adapter providers: " + adapterLoader.adapters().size());
-            for (ModAdapter adapter : adapterLoader.adapters()) {
+            List<ModAdapter> adapters = adapterLoader == null ? List.of() : adapterLoader.adapters();
+            sender.sendMessage(ChatColor.GREEN + "Adapter providers: " + adapters.size());
+            for (ModAdapter adapter : adapters) {
                 sender.sendMessage(ChatColor.GRAY + adapter.getName() + " — " + String.join(", ", adapter.supportedMods()));
             }
             return true;
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            sender.sendMessage(ChatColor.YELLOW + "Resource pack can be rebuilt now; adapter changes require a full server restart.");
+            sender.sendMessage(ChatColor.YELLOW + "Adapter changes require a full server restart.");
             try {
                 ResourcePackService.PackInfo pack = resourcePacks.rebuild();
                 detectedMods = compatibility.scan();
