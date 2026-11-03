@@ -49,6 +49,22 @@ class ResourcePackServiceTest {
     }
 
     @Test
+    void cachesTheHashAndRefreshesItWhenTheArchiveChanges() throws Exception {
+        ResourcePackService service = new ResourcePackService(tempDir);
+        ResourcePackService.PackInfo first = service.rebuild();
+
+        assertSame(first, service.getInfo());
+
+        byte[] replacement = "an externally replaced pack archive with another size".getBytes(StandardCharsets.UTF_8);
+        Files.write(service.getArchive(), replacement);
+        ResourcePackService.PackInfo refreshed = service.getInfo();
+
+        assertNotSame(first, refreshed);
+        assertEquals(replacement.length, refreshed.size());
+        assertNotEquals(first.sha1(), refreshed.sha1());
+    }
+
+    @Test
     void rebuildReplacesThePreviousArchiveCleanly() throws Exception {
         ResourcePackService service = new ResourcePackService(tempDir);
         ResourcePackService.PackInfo first = service.rebuild();
